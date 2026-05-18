@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package simulation;
+
+// The message sent from C++ to Go
+message Body {
+  int32 id = 1;
+  double x = 2;
+  double y = 3;
+  double mass = 4;
+  double velocity_x = 5;
+  double velocity_y = 6;
+}
+
+// A collection of all bodies in the current frame
+message Frame {
+  int32 frame_number = 1;
+  repeated Body bodies = 2;
+}
+
+// gRPC service definition
+service SimulationService {
+  // C++ will stream frames to the Go server
+  rpc StreamFrames(stream Frame) returns (Reply) {}
+}
+
+message Reply {
+  string message = 1;
+}

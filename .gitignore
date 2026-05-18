@@ -1,0 +1,6 @@
+# === C++ Build Artifacts ===
+*.o
+*.out
+*.exe
+.vscode/
+.idea/
