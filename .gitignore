@@ -4,3 +4,4 @@
 *.exe
 .vscode/
 .idea/
+engine/build/

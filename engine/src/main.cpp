@@ -20,7 +20,7 @@ Derivative calculate_derivative(const State& s, double mass, const std::vector<B
 
         double dx = other.state.x - s.x;
         double dy = other.state.y - s.y;
-        double dist_sq = dx * dx + dy * dy + 1e9;   // +1e9 to avoid division by zero
+        double dist_sq = dx * dx + dy * dy + 1e-4;   // +1e-4 to avoid division by zero
         double dist = std::sqrt(dist_sq);
         // double force = (G * mass * other.mass) / dist_sq; <- FORCE, if expressed fully by formula F = G*m1*m2 / r^2
 
@@ -102,10 +102,10 @@ int main() {
 
     // Example: Setting up a Binary system
     std::vector<Body> universe;
-    universe.push_back(Body(1, 1000.0, 0.0, 0.0, 0.0, -0.1));   // star at center
-    universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 10.0));     // planet orbiting
 
-    double dt = 0.01;    // Time step size
+    universe.push_back(Body(1, 1e14, 0.0, 0.0, 0.0, 0.0)); // Real cosmic mass scale (10^14)
+    universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 100.0));
+    double dt = 0.001;    // Time step size
 
     // Simulate 5 steps and print coordinates
     for (int frame = 0; frame < 5; ++frame) {
