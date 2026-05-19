@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include "../include/body.hpp"
+#include "simulation.pb.h"
 
 const double G = 6.67430e-11;   // Gravitational Constant
 
@@ -107,11 +108,31 @@ int main() {
     universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 100.0));
     double dt = 0.001;    // Time step size
 
-    // Simulate 5 steps and print coordinates
+    // Simulate 5 steps and capture Protobuf telemetry
     for (int frame = 0; frame < 5; ++frame) {
         rk4_step(universe, dt);
-        std::cout << "Frame " << frame << " -> Planet X: " << universe[1].state.x
-                    << ", Y: " << universe[1].state.y << std::endl;
+
+        // Protobuf TelemetryFrame object
+        astrophysics::TelemetryFrame telemetry_frame;
+        telemetry_frame.set_frame_number(frame);
+        telemetry_frame.set_timestamp(frame * dt);
+
+        // Looping through vector and copying data into Protobuf objects
+        for (const auto& body : universe) {
+            // Allocate a new BodyState object
+            astrophysics::BodyState* state_msg = telemetry_frame.add_bodies();
+            state_msg->set_id(body.id);
+            state_msg->set_mass(body.mass);
+            state_msg->set_x(body.state.x);
+            state_msg->set_y(body.state.y);
+            state_msg->set_vx(body.state.vx);
+            state_msg->set_vy(body.state.vy);
+        }
+
+        // Just for debug (printing out)
+        std::cout << "Frame: " << frame << " -> Packed: "
+                    << telemetry_frame.bodies_size() << " bodies. Total binary size: "
+                    << telemetry_frame.ByteSizeLong() << " bytes." << std::endl;
     }
     
     return 0;

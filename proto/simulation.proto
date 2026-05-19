@@ -1,29 +1,30 @@
 syntax = "proto3";
 
-package simulation;
+package astrophysics;
 
-// The message sent from C++ to Go
-message Body {
-  int32 id = 1;
-  double x = 2;
-  double y = 3;
-  double mass = 4;
-  double velocity_x = 5;
-  double velocity_y = 6;
-}
-
-// A collection of all bodies in the current frame
-message Frame {
-  int32 frame_number = 1;
-  repeated Body bodies = 2;
-}
-
-// gRPC service definition
 service SimulationService {
-  // C++ will stream frames to the Go server
-  rpc StreamFrames(stream Frame) returns (Reply) {}
+  rpc StreamTelemetry (stream TelemetryFrame) returns (SimulationResponse);
 }
 
-message Reply {
-  string message = 1;
+// Data structure representing a single celestial body state
+message BodyState {
+  int32 id = 1;
+  double mass = 2;
+  double x = 3;
+  double y = 4;
+  double vx = 5;
+  double vy = 6;
+}
+
+// A collection of all bodies in the universe at a specific moment in time
+message TelemetryFrame {
+  int64 frame_number = 1;
+  double timestamp = 2;
+  repeated BodyState bodies = 3;
+}
+
+// Acknowledgement
+message SimulationResponse {
+  bool success = 1;
+  string sim_message = 2;
 }
