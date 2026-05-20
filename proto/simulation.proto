@@ -2,8 +2,10 @@ syntax = "proto3";
 
 package astrophysics;
 
+option go_package = "github.com/yernur/astrophysics_simulation/server/proto";
+
 service SimulationService {
-  rpc StreamTelemetry (stream TelemetryFrame) returns (SimulationResponse);
+  rpc StreamTelemetry(stream TelemetryFrame) returns (SimulationResponse);
 }
 
 // Data structure representing a single celestial body state
