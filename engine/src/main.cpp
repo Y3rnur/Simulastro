@@ -3,6 +3,8 @@
 #include <cmath>
 #include "../include/body.hpp"
 #include "simulation.pb.h"
+#include <grpcpp/grpcpp.h>
+#include "simulation.grpc.pb.h"
 
 const double G = 6.67430e-11;   // Gravitational Constant
 
@@ -108,18 +110,23 @@ int main() {
     universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 100.0));
     double dt = 0.001;    // Time step size
 
-    // Simulate 5 steps and capture Protobuf telemetry
+    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
+    std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
+
+    grpc::ClientContext context;
+    astrophysics::SimulationResponse response;
+
+    std::unique_ptr<grpc::ClientWriter<astrophysics::TelemetryFrame>> writer(stub->StreamTelemetry(&context, &response));
+
+    // Simulating 5 steps and capturing Protobuf telemetry
     for (int frame = 0; frame < 5; ++frame) {
         rk4_step(universe, dt);
 
-        // Protobuf TelemetryFrame object
         astrophysics::TelemetryFrame telemetry_frame;
         telemetry_frame.set_frame_number(frame);
         telemetry_frame.set_timestamp(frame * dt);
 
-        // Looping through vector and copying data into Protobuf objects
         for (const auto& body : universe) {
-            // Allocate a new BodyState object
             astrophysics::BodyState* state_msg = telemetry_frame.add_bodies();
             state_msg->set_id(body.id);
             state_msg->set_mass(body.mass);
@@ -129,10 +136,26 @@ int main() {
             state_msg->set_vy(body.state.vy);
         }
 
-        // Just for debug (printing out)
         std::cout << "Frame: " << frame << " -> Packed: "
-                    << telemetry_frame.bodies_size() << " bodies. Total binary size: "
-                    << telemetry_frame.ByteSizeLong() << " bytes." << std::endl;
+                    << telemetry_frame.bodies_size() << " bodies ("
+                    << telemetry_frame.ByteSizeLong() << " bytes). Sending..." << std::endl;
+        
+        // Sending the packed frame across the socket pipe
+        if (!writer->Write(telemetry_frame)) {
+            std::cerr << "gRPC pipeline error" << std::endl;
+            break;
+        }
+    }
+
+    writer->WritesDone();
+    grpc::Status status = writer->Finish();
+
+    if (status.ok()) {
+        std::cout << "Go Response: Success = " << (response.success() ? "TRUE" : "FALSE")
+                    << " -> Message: " << response.sim_message() << std::endl;
+    } else {
+        std::cerr << "gRPC Connection Failure Code (" << status.error_code()
+                    << "): " << status.error_message() << std::endl;
     }
     
     return 0;
