@@ -5,17 +5,20 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
+	"github.com/yernur/astrophysics_simulation/server/internal/websocket"
 	pb "github.com/yernur/astrophysics_simulation/server/proto"
 	"google.golang.org/grpc"
 )
 
-// gRPC server interface (also maintains reference to concurrent-safe cache instance)
+// gRPC server interface (also maintains reference to concurrent-safe cache instance and active WebSocket broadcast hub)
 type simulationServer struct {
 	pb.UnimplementedSimulationServiceServer
 	simCache *cache.SimulationCache
+	wsHub    *websocket.Hub
 }
 
 // StreamTelemetry implements the client-to-server streaming RPC method
@@ -45,9 +48,11 @@ func (s *simulationServer) StreamTelemetry(stream pb.SimulationService_StreamTel
 			return err
 		}
 
-		s.simCache.Push(frame)
+		s.simCache.Push(frame) // save frame into circular cache
 
-		fmt.Printf("📦 [Cached Frame %d] Timestamp: %.3fs | Contains %d Celestial Bodies\n", frame.FrameNumber, frame.Timestamp, len(frame.Bodies))
+		s.wsHub.Broadcast <- frame // throw the frame into the Hub's broadcast channel
+
+		fmt.Printf("📦 [Cached & Broadcasted Frame %d] Timestamp: %.3fs | Contains %d Celestial Bodies\n", frame.FrameNumber, frame.Timestamp, len(frame.Bodies))
 	}
 }
 
@@ -86,24 +91,37 @@ func main() {
 	globalCache := cache.NewSimulationCache(maxHistorySlots)
 	fmt.Printf("Pre-allocated %d structural history frames in local system memory.\n", maxHistorySlots)
 
-	// Local port where C++ engine will connect
-	port := ":50051"
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
 
-	// TCP work listener
-	listener, err := net.Listen("tcp", port)
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		websocket.ServeWs(wsHub, globalCache, w, r)
+	})
+
+	webPort := ":8080"
+	go func() {
+		fmt.Printf("🌐 WebSocket Server listening for browser connections on port %s/ws...\n", webPort)
+		if err := http.ListenAndServe(webPort, nil); err != nil {
+			log.Fatalf("❌ Failed to activate HTTP WebSocket server: %v", err)
+		}
+	}()
+
+	// Local port where C++ engine will connect
+	grpcPort := ":50051"
+	listener, err := net.Listen("tcp", grpcPort)
 	if err != nil {
-		log.Fatalf("❌ Failed to bind to port %s: %v", port, err)
+		log.Fatalf("❌ Failed to bind to network port %s: %v", grpcPort, err)
 	}
 
 	grpcServer := grpc.NewServer()
-
 	simServer := &simulationServer{
-		simCache: globalCache, // hooking cache to the network receiver
+		simCache: globalCache, // connect cache to the network receiver
+		wsHub:    wsHub,       // connect hub instance to gRPC receiver
 	}
 
 	pb.RegisterSimulationServiceServer(grpcServer, simServer)
 
-	fmt.Printf("gRPC Engine Hub listening on port %s...\n", port)
+	fmt.Printf("gRPC Engine Hub listening on port %s...\n", grpcPort)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatalf("❌ Failed to activate gRPC engine processing loop: %v", err)
