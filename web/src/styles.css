@@ -1,0 +1,109 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #0b0f19;
+    color: #e2e8f0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Viewport takes up maximum flexible space */
+.viewport-container {
+    flex: 1;
+    background-color: #020617;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+canvas {
+    background-color: #000000;
+    box-shadow: inset 0 0 20px rgba(0, 255, 200, 0.1);
+    display: block;
+}
+
+/* Fixed side control bar */
+.control-panel {
+    width: 320px;
+    background-color: #0f172a;
+    border-left: 2px solid #1e293b;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+h2, h3 {
+    color: #38bdf8;
+    letter-spacing: 0.5px;
+}
+
+.divider {
+    border: 0;
+    height: 1px;
+    background: #1e293b;
+}
+
+.status-indicator {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.connected { color: #4ade80; }
+.disconnected { color: #f87171; }
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.btn {
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+}
+
+.btn-success { background-color: #10b981; color: white; }
+.btn-success:hover { background-color: #059669; }
+
+.btn-danger { background-color: #ef4444; color: white; }
+.btn-danger:hover { background-color: #dc2626; }
+
+.btn-primary { background-color: #3b82f6; color: white; }
+.btn-primary:hover { background-color: #2563eb; }
+
+.stats-panel {
+    background-color: #1e293b;
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.stats-panel p {
+    font-size: 0.95rem;
+}
+
+.stats-panel span {
+    color: #f59e0b;
+    font-weight: bold;
+}

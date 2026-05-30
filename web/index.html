@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astrophysics Lab Viewport</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <main class="viewport-container">
+            <canvas id="simCanvas"></canvas>
+        </main>
+
+        <aside class="control-panel">
+            <h2>🌌 Cosmic Control</h2>
+            <div class="status-indicator">
+                Status: <span id="connectionStatus" class="disconnected">Disconnected</span>
+            </div>
+
+            <hr class="divider">
+
+            <div class="button-group">
+                <button id="playBtn" class="btn btn-success">▶ Play Simulation</button>
+                <button id="pauseBtn" class="btn btn-danger">⏸ Pause</button>
+                <button id="historyBtn" class="btn btn-primary">🕒 Fetch History</button>
+            </div>
+
+            <div class="stats-panel">
+                <h3>📊 Live Telemetry</h3>
+                <p>Frame: <span id="telemetryFrame">0</span></p>
+                <p>Sim Time: <span id="telemetryTime">0.000</span></p>
+                <p>Active Bodies: <span id="telemetryBodies">0</span></p>
+            </div>
+        </aside>
+    </div>
+
+    <script src="src/app.js"></script>
+</body>
+</html>
