@@ -29,6 +29,7 @@ type Client struct {
 	Conn     *websocket.Conn
 	Send     chan []byte
 	simCache *cache.SimulationCache // reference to history cache for time-travel queries
+	isPaused bool                   // state valve for streaming gating
 }
 
 // ReadPump loops constantly to catch incoming command strings from the HTML5 control buttons
@@ -57,8 +58,10 @@ func (c *Client) ReadPump() {
 
 		switch command {
 		case "PAUSE":
+			c.isPaused = true
 			log.Println("⏸️ UI initiated Pause State. Holding live stream frames.")
 		case "PLAY":
+			c.isPaused = false
 			log.Println("▶️ UI initiated Play State. Resuming live frame rendering coordinates.")
 		case "FETCH_HISTORY":
 			log.Println("🕒 Time-Travel Scrubber activated! Fetching historical RAM cache buffer...")
@@ -84,6 +87,10 @@ func (c *Client) WritePump() {
 			if !ok {
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
+			}
+
+			if c.isPaused { // skip writing, if user paused
+				continue
 			}
 
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
@@ -112,7 +119,7 @@ func ServeWs(hub *Hub, simCache *cache.SimulationCache, w http.ResponseWriter, r
 		return
 	}
 
-	client := &Client{Hub: hub, Conn: conn, Send: make(chan []byte, 256), simCache: simCache}
+	client := &Client{Hub: hub, Conn: conn, Send: make(chan []byte, 256), simCache: simCache, isPaused: false}
 	client.Hub.Register <- client
 
 	// Launch individual client execution run routines onto independent lightweight concurrent spaces

@@ -20,7 +20,7 @@ canvas.height = VIEW_SIZE;
 
 // Coordinate mapping parameters
 const SCREEN_CENTER = VIEW_SIZE / 2;
-const ZOOM_SCALE = 2.0;
+const ZOOM_SCALE = 25.0;
 
 const socket = new WebSocket('ws://localhost:8080/ws');
 

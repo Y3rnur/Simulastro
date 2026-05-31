@@ -1,6 +1,9 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <chrono>
+#include <thread>
+
 #include "../include/body.hpp"
 #include "simulation.pb.h"
 #include <grpcpp/grpcpp.h>
@@ -107,8 +110,8 @@ int main() {
     std::vector<Body> universe;
 
     universe.push_back(Body(1, 1e14, 0.0, 0.0, 0.0, 0.0)); // Real cosmic mass scale (10^14)
-    universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 100.0));
-    double dt = 0.001;    // Time step size
+    universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 25.8));
+    double dt = 0.01;    // Time step size
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
@@ -118,13 +121,16 @@ int main() {
 
     std::unique_ptr<grpc::ClientWriter<astrophysics::TelemetryFrame>> writer(stub->StreamTelemetry(&context, &response));
 
+    int64_t frame = 0;
+    double current_simulation_time = 0.0;
+
     // Simulating 5 steps and capturing Protobuf telemetry
-    for (int frame = 0; frame < 5; ++frame) {
+    while (true) {
         rk4_step(universe, dt);
 
         astrophysics::TelemetryFrame telemetry_frame;
         telemetry_frame.set_frame_number(frame);
-        telemetry_frame.set_timestamp(frame * dt);
+        telemetry_frame.set_timestamp(current_simulation_time);
 
         for (const auto& body : universe) {
             astrophysics::BodyState* state_msg = telemetry_frame.add_bodies();
@@ -145,6 +151,12 @@ int main() {
             std::cerr << "gRPC pipeline error" << std::endl;
             break;
         }
+
+        frame++;
+        current_simulation_time += dt;
+
+        // rate throttle
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     writer->WritesDone();
