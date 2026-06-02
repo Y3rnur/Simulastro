@@ -5,6 +5,8 @@ import (
 	"log"
 
 	pb "github.com/yernur/astrophysics_simulation/server/proto"
+
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // Hub maintains the set of active clients and broadcasts messages to them
@@ -41,8 +43,31 @@ func (h *Hub) Run() {
 			}
 
 		case frame := <-h.Broadcast:
-			// Marshal our Protobuf TelemetryFrame directly into optimized JSON payloads for the browser
-			payload, err := json.Marshal(frame)
+			liveEnvelope := struct {
+				Type    string      `json:"type"`
+				Payload interface{} `json:"payload"`
+			}{
+				Type:    "LIVE",
+				Payload: frame,
+			}
+
+			// Convert Protobuf TelemetryFrame to a JSON-friendly object
+			b, err := protojson.Marshal(frame)
+			if err != nil {
+				log.Printf("⚠️ Failed to protojson-encode telemetry frame: %v", err)
+				continue
+			}
+
+			var payloadObj interface{}
+			if err := json.Unmarshal(b, &payloadObj); err != nil {
+				log.Printf("⚠️ Failed to convert protojson bytes into object: %v", err)
+				continue
+			}
+
+			liveEnvelope.Payload = payloadObj
+
+			// Marshal the full envelope
+			payload, err := json.Marshal(liveEnvelope)
 			if err != nil {
 				log.Printf("⚠️ Failed to marshal telemetry frame to JSON: %v", err)
 				continue

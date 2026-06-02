@@ -1,12 +1,15 @@
 package websocket
 
 import (
+	"bytes"
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -64,10 +67,50 @@ func (c *Client) ReadPump() {
 			c.isPaused = false
 			log.Println("▶️ UI initiated Play State. Resuming live frame rendering coordinates.")
 		case "FETCH_HISTORY":
+			if !c.isPaused {
+				log.Println("⚠️ FETCH_HISTORY ignored: client must be in PAUSE state before requesting history")
+				continue
+			}
+
 			log.Println("🕒 Time-Travel Scrubber activated! Fetching historical RAM cache buffer...")
 			historyFrames := c.simCache.GetHistory()
+			log.Printf("📺 Preparing %d cached frames to send to frontend slider memory", len(historyFrames))
 
-			log.Printf("📺 Dispatching %d cached frames directly down the pipe to frontend slider memory!", len(historyFrames))
+			// Convert each protobuf frame to a JSON-friendly object via protojson
+			converted := make([]interface{}, 0, len(historyFrames))
+			for _, f := range historyFrames {
+				// ensure nil-safety
+				if f == nil {
+					continue
+				}
+				b, err := protojson.Marshal(f)
+				if err != nil {
+					log.Printf("⚠️ Failed to protojson-encode history frame: %v", err)
+					continue
+				}
+				var obj interface{}
+				if err := json.Unmarshal(b, &obj); err != nil {
+					log.Printf("⚠️ Failed to convert protojson bytes into object: %v", err)
+					continue
+				}
+				converted = append(converted, obj)
+			}
+
+			historyEnvelope := struct {
+				Type   string        `json:"type"`
+				Frames []interface{} `json:"frames"`
+			}{
+				Type:   "HISTORY",
+				Frames: converted,
+			}
+
+			jsonBytes, err := json.Marshal(historyEnvelope)
+			if err != nil {
+				log.Printf("❌ Error marshaling history memory buffer: %v", err)
+				continue
+			}
+
+			c.Send <- jsonBytes // push the marshaled payload into client's write channel
 		}
 	}
 }
@@ -89,8 +132,12 @@ func (c *Client) WritePump() {
 				return
 			}
 
-			if c.isPaused { // skip writing, if user paused
-				continue
+			if c.isPaused {
+				// still allow HISTORY envelopes while paused so the client can fetch and
+				// replay cached frames — detect HISTORY by a simple substring check
+				if !bytes.Contains(message, []byte("\"HISTORY\"")) {
+					continue
+				}
 			}
 
 			w, err := c.Conn.NextWriter(websocket.TextMessage)

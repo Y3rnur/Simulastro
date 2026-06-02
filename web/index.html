@@ -10,6 +10,12 @@
     <div class="app-container">
         <main class="viewport-container">
             <canvas id="simCanvas"></canvas>
+
+            <div class="timeline-container" style="max-width: 100%; display: flex; align-items: center; gap: 12px; background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #1e293b;">
+                <span style="font-family: monospace; font-size: 0.85rem; color: #94a3b8; min-width: 60px;">Timeline:</span>
+                <input type="range" id="timeSlider" min="0" max="0" value="0" disabled style="flex: 1; cursor: not-allowed; accent-color: #38bdf8;">
+                <span id="sliderIndexDisplay" style="font-family: monospace; font-size: 0.85rem; color: #f59e0b; min-width: 40px; text-align: right;">0/0</span>
+            </div>
         </main>
 
         <aside class="control-panel">
