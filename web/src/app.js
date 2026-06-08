@@ -22,7 +22,7 @@ canvas.height = VIEW_SIZE;
 
 // Coordinate mapping parameters
 const SCREEN_CENTER = VIEW_SIZE / 2;
-const ZOOM_SCALE = 25.0;
+let ZOOM_SCALE = 0.1;
 
 // Local history memory array
 let historicalTimelineCache = [];
@@ -71,6 +71,19 @@ socket.onmessage = (event) => {
         if (packet.type === "LIVE") {
             const telemetryFrame = packet.payload;
             
+            console.log('LIVE', telemetryFrame.frameNumber, telemetryFrame.timestamp);
+            if (telemetryFrame.bodies && telemetryFrame.bodies.length) {
+                telemetryFrame.bodies.forEach(b => {
+                    const sx = SCREEN_CENTER + (b.x * ZOOM_SCALE);
+                    const sy = SCREEN_CENTER - (b.y * ZOOM_SCALE);
+                    const dr = computeDisplayRadius(b);
+                    
+                    console.log(`BODY id=${b.id} x=${b.x} y=${b.y} sx=${sx.toFixed(2)} sy=${sy.toFixed(2)} r=${dr.toFixed(2)} alive=${b.alive}`);
+                });
+            } else {
+                console.log('NO BODIES in payload');
+            }
+
             // Update control panel stats dashboard fields
             frameEl.textContent = telemetryFrame.frameNumber || 0;
             timeEl.textContent = (telemetryFrame.timestamp || 0).toFixed(3);
@@ -108,6 +121,16 @@ function renderHistoryFrameIndex(index) {
     renderSimulationFrame(targetFrame.bodies || []);
 }
 
+// radius computing helper
+function computeDisplayRadius(body) {
+    let rawRadius = (body.radius !== undefined && body.radius !== null)
+        ? body.radius
+        : Math.cbrt(Math.max(body.mass || 1e-6, 1e-6)) * 0.0005;
+    let px = rawRadius * ZOOM_SCALE;
+    px = Math.max(4, Math.min(px, 35)); // clamp range (px)
+    return px;
+}
+
 // Rendering pipeline
 function renderSimulationFrame(bodies) {
     ctx.clearRect(0, 0, VIEW_SIZE, VIEW_SIZE);
@@ -120,22 +143,42 @@ function renderSimulationFrame(bodies) {
     ctx.stroke();
 
     bodies.forEach(body => {
-        // coordinate transformation
-        const screenX = SCREEN_CENTER + (body.x * ZOOM_SCALE);
-        const screenY = SCREEN_CENTER - (body.y * ZOOM_SCALE);
-        
-        // draw the planet as circle
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, 8, 0, 2 * Math.PI);
-        ctx.fillStyle = '#38bdf8';
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#0284c7';
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        // zero value float optimization (Protobuf drops 0.0)
+        const rawX = body.x !== undefined && body.x !== null ? body.x : 0.0;
+        const rawY = body.y !== undefined && body.y !== null ? body.y : 0.0;
 
-        ctx.fillStyle = '#94a3b8';
+        // false boolean optimization (Protobuf drops false)
+        const isAlive = body.alive !== undefined && body.alive !== null ? body.alive : false;
+
+        // coordinate transformation
+        const screenX = SCREEN_CENTER + (rawX * ZOOM_SCALE);
+        const screenY = SCREEN_CENTER - (rawY * ZOOM_SCALE);
+        
+        // draw the planet as circle — compute radius from engine-provided radius or mass fallback
+        const displayRadius = computeDisplayRadius(body);
+        
+        ctx.save();
+
+        if (isAlive) {
+            ctx.globalAlpha = 0.35;  // dead bodies become ghostly trails
+        }
+
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, displayRadius, 0, 2 * Math.PI);
+
+        ctx.fillStyle = isAlive ? '#38bdf8' : '#ef4444';
+        ctx.shadowBlur = isAlive ? 12 : 0;
+        ctx.shadowColor = '#0284c7';
+
+        ctx.fill();
+        ctx.closePath();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = isAlive ? '#94a3b8' : '#78716c';
         ctx.font = '10px monospace';
-        ctx.fillText(`ID:${body.id}`, screenX + 12, screenY + 4);
+        ctx.fillText(`ID:${body.id}${!body.alive ? ' (DEAD)' : ''}`, screenX + displayRadius + 6, screenY + 4);
+
+        ctx.restore();
     });
 }
 
@@ -159,3 +202,9 @@ historyBtn.onclick = () => {
     socket.send("FETCH_HISTORY");
     console.log("📤 Sent Command: FETCH_HISTORY");
 };
+
+// Add a simple window event listener or bind to an input slider to zoom on the fly
+window.addEventListener('wheel', (e) => {
+    if (e.deltaY > 0) ZOOM_SCALE *= 0.9;  // Zoom out
+    else ZOOM_SCALE *= 1.1;               // Zoom in
+});

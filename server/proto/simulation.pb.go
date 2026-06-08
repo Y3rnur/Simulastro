@@ -30,6 +30,8 @@ type BodyState struct {
 	Y             float64                `protobuf:"fixed64,4,opt,name=y,proto3" json:"y,omitempty"`
 	Vx            float64                `protobuf:"fixed64,5,opt,name=vx,proto3" json:"vx,omitempty"`
 	Vy            float64                `protobuf:"fixed64,6,opt,name=vy,proto3" json:"vy,omitempty"`
+	Radius        float64                `protobuf:"fixed64,7,opt,name=radius,proto3" json:"radius,omitempty"`
+	Alive         bool                   `protobuf:"varint,8,opt,name=alive,proto3" json:"alive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -104,6 +106,20 @@ func (x *BodyState) GetVy() float64 {
 		return x.Vy
 	}
 	return 0
+}
+
+func (x *BodyState) GetRadius() float64 {
+	if x != nil {
+		return x.Radius
+	}
+	return 0
+}
+
+func (x *BodyState) GetAlive() bool {
+	if x != nil {
+		return x.Alive
+	}
+	return false
 }
 
 // A collection of all bodies in the universe at a specific moment in time
@@ -224,14 +240,16 @@ var File_simulation_proto protoreflect.FileDescriptor
 
 const file_simulation_proto_rawDesc = "" +
 	"\n" +
-	"\x10simulation.proto\x12\fastrophysics\"k\n" +
+	"\x10simulation.proto\x12\fastrophysics\"\x99\x01\n" +
 	"\tBodyState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04mass\x18\x02 \x01(\x01R\x04mass\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x01R\x01y\x12\x0e\n" +
 	"\x02vx\x18\x05 \x01(\x01R\x02vx\x12\x0e\n" +
-	"\x02vy\x18\x06 \x01(\x01R\x02vy\"\x82\x01\n" +
+	"\x02vy\x18\x06 \x01(\x01R\x02vy\x12\x16\n" +
+	"\x06radius\x18\a \x01(\x01R\x06radius\x12\x14\n" +
+	"\x05alive\x18\b \x01(\bR\x05alive\"\x82\x01\n" +
 	"\x0eTelemetryFrame\x12!\n" +
 	"\fframe_number\x18\x01 \x01(\x03R\vframeNumber\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x01R\ttimestamp\x12/\n" +

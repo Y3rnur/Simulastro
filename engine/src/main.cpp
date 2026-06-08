@@ -103,15 +103,92 @@ void rk4_step(std::vector<Body>& bodies, double dt) {
     }
 }
 
+// squared distance helper
+inline double dist2(const State& a, const State& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
+// Absorb & Merge (inelastic coalescence logic)
+void resolve_collisions(std::vector<Body>& bodies) {
+    const int n = bodies.size();
+    // pairwise check (O(n^2))
+    for (int i = 0; i < n; ++i) {
+        if (!bodies[i].alive) continue;
+        for (int j = i + 1; j < n; ++j) {
+            if (!bodies[j].alive) continue;
+
+            double rsum = bodies[i].radius + bodies[j].radius;
+            double rsum2 = rsum * rsum;
+            double d2 = dist2(bodies[i].state, bodies[j].state);
+            if (d2 <= rsum2) {
+                // choose heavier as absorber
+                Body *a = &bodies[i];
+                Body *b = &bodies[j];
+                if (b->mass > a->mass) std::swap(a, b);
+
+                // linear momentum conservation (inelastic merge)
+                double vx_final = (a->mass * a->state.vx + b->mass * b->state.vx) / (a->mass + b->mass);
+                double vy_final = (a->mass * a->state.vy + b->mass * b->state.vy) / (a->mass + b->mass);
+
+                a->state.vx = vx_final;
+                a->state.vy = vy_final;
+                a->mass = a->mass + b->mass;
+                // Update absorber radius from mass
+                a->radius = Body::radiusFromMass(a->mass);
+
+                // Mark victim dead (will be skipped when sending telemetry)
+                b->alive = false;
+                std::cerr << "[collision] absorber=" << a->id << " new_mass=" << a->mass << " new_radius=" << a->radius << "\n";
+            }
+        }
+    }
+}
+
 int main() {
     std::cout << "Astrophysics Engine initialized with RK4..." << std::endl;
 
     // Example: Setting up a Binary system
     std::vector<Body> universe;
 
-    universe.push_back(Body(1, 1e14, 0.0, 0.0, 0.0, 0.0)); // Real cosmic mass scale (10^14)
-    universe.push_back(Body(2, 1.0, 10.0, 0.0, 0.0, 25.8));
-    double dt = 0.01;    // Time step size
+    /*  Head-on collision example
+    double r0 = 3000.0;       // Initial distance
+    double M = 5e11;          // Central mass
+    double satellite_mass = 1e4;
+
+    // Direct head-on collision: Vx is negative, pointing straight to origin
+    double v_impact = -5.0;   // Moving fast straight toward the center star
+
+    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
+    universe.push_back(Body(2, satellite_mass, r0, 0.0, v_impact, 0.0, Body::radiusFromMass(satellite_mass)));
+
+    double dt = 5.0;          // A balanced 5-second step to watch the approach smoothly
+    */
+
+    /*  Orbit example
+    double r0 = 3000.0;   // initial distance
+    double M = 5e11;    // central mass
+    double satellite_mass = 1e4;
+    double v_escape = std::sqrt(2.0 * G * M / r0);
+    double v_init = 0.707 * v_escape;
+
+    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
+    universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
+    double dt = 500.0;    // Time step size
+    */
+
+      // Free fall example
+    double r0 = 500.0;       // Placed reasonably close so it falls quickly
+    double M = 5e11;          // Stable central mass
+    double satellite_mass = 1e10; // Mega-satellite so it has a visible radius!
+
+    // Let's drop it straight down from the top! 
+    // x = 0, y = r0, vx = 0, vy = 0 -> Pure gravitational freefall
+    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
+    universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, 0.0, Body::radiusFromMass(satellite_mass)));
+
+    double dt = 2.0;          // 2-second steps keep the RK4 math highly stable
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
@@ -128,6 +205,9 @@ int main() {
     while (true) {
         rk4_step(universe, dt);
 
+        // collision resolution
+        resolve_collisions(universe);
+
         astrophysics::TelemetryFrame telemetry_frame;
         telemetry_frame.set_frame_number(frame);
         telemetry_frame.set_timestamp(current_simulation_time);
@@ -140,6 +220,8 @@ int main() {
             state_msg->set_y(body.state.y);
             state_msg->set_vx(body.state.vx);
             state_msg->set_vy(body.state.vy);
+            state_msg->set_radius(body.radius);
+            state_msg->set_alive(body.alive);
         }
 
         std::cout << "Frame: " << frame << " -> Packed: "
