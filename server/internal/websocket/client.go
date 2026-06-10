@@ -35,6 +35,12 @@ type Client struct {
 	isPaused bool                   // state valve for streaming gating
 }
 
+// Small struct to parse the control payload
+type WSMessage struct {
+	Type       string  `json:"type"`
+	Multiplier float64 `json:"multiplier"` // For SET_SPEED
+}
+
 // ReadPump loops constantly to catch incoming command strings from the HTML5 control buttons
 func (c *Client) ReadPump() {
 	defer func() {
@@ -55,8 +61,16 @@ func (c *Client) ReadPump() {
 			break
 		}
 
+		var msg WSMessage
+		var command string
+
 		// Handle user interactive command payloads from canvas dashboard UI
-		command := string(message)
+		if err := json.Unmarshal(message, &msg); err == nil && msg.Type != "" {
+			command = msg.Type
+		} else {
+			command = string(message)
+		}
+
 		log.Printf("🎛️ Command received from client interface: %s", command)
 
 		switch command {
@@ -111,6 +125,16 @@ func (c *Client) ReadPump() {
 			}
 
 			c.Send <- jsonBytes // push the marshaled payload into client's write channel
+		case "SET_SPEED":
+			log.Printf("💨 SET_SPEED command processed. Multiplier: %.3fx", msg.Multiplier)
+
+			// non-blocking send to hub channel
+			select {
+			case c.Hub.SpeedUpdates <- msg.Multiplier:
+				log.Printf("enqueued speed update %.3f", msg.Multiplier)
+			default:
+				log.Printf("⚠️ speed update dropped (hub busy): %.3f", msg.Multiplier)
+			}
 		}
 	}
 }

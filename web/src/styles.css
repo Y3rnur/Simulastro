@@ -107,3 +107,77 @@ h2, h3 {
     color: #f59e0b;
     font-weight: bold;
 }
+
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #0f172a;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+    margin-top: 8px;          
+    max-width: 100%;
+}
+
+.speed-control label {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #94a3b8;           
+    min-width: 60px;          
+}
+
+#speedSlider {
+    flex: 1;                  
+    accent-color: #38bdf8;    
+    cursor: pointer;
+}
+
+#speedLabel {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #f59e0b;           
+    min-width: 40px;
+    text-align: right;
+}
+
+.preset-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.preset-buttons button {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preset-buttons button:hover {
+    background: #334155;
+    color: #f8fafc;
+    border-color: #475569;
+}
+
+.preset-buttons button:active {
+    background: #0284c7;      
+    color: #ffffff;
+}
+
+.canvas-controls-overlay {
+    position: absolute;
+    bottom: 20px;          /* Places it neatly at the bottom of the viewport */
+    left: 50%;
+    transform: translateX(-50%); /* Centers the entire control group perfectly */
+    width: 90%;            /* Adjust width as needed to fit nicely */
+    max-width: 600px;      /* Stops it from getting too stretched on wide screens */
+    display: flex;
+    flex-direction: column;/* FORCES vertical stacking! */
+    gap: 8px;              /* Clean spacing between timeline and speed boxes */
+    z-index: 10;           /* Ensures it stays visible on top of background layers */
+}

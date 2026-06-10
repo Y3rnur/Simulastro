@@ -1,24 +1,42 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
 	"github.com/yernur/astrophysics_simulation/server/internal/websocket"
 	pb "github.com/yernur/astrophysics_simulation/server/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // gRPC server interface (also maintains reference to concurrent-safe cache instance and active WebSocket broadcast hub)
 type simulationServer struct {
 	pb.UnimplementedSimulationServiceServer
+	pb.UnimplementedSpeedServiceServer
+
 	simCache *cache.SimulationCache
 	wsHub    *websocket.Hub
+
+	speedMutex      sync.RWMutex
+	speedMultiplier float64
+}
+
+func (s *simulationServer) UpdateSpeed(ctx context.Context, req *pb.SpeedRequest) (*pb.SpeedResponse, error) {
+	s.speedMutex.Lock()
+	defer s.speedMutex.Unlock()
+
+	s.speedMultiplier = req.Multiplier
+	log.Printf("Server speed state updated via gRPC to: %.1fx", s.speedMultiplier)
+
+	return &pb.SpeedResponse{Ok: true}, nil
 }
 
 // StreamTelemetry implements the client-to-server streaming RPC method
@@ -114,12 +132,52 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
+
 	simServer := &simulationServer{
-		simCache: globalCache, // connect cache to the network receiver
-		wsHub:    wsHub,       // connect hub instance to gRPC receiver
+		simCache:        globalCache, // connect cache to the network receiver
+		wsHub:           wsHub,       // connect hub instance to gRPC receiver
+		speedMultiplier: 1.0,         // default 1.0x execution speed
 	}
 
 	pb.RegisterSimulationServiceServer(grpcServer, simServer)
+
+	// address where the C++ engine exposes its speed control RPC
+	engineControlAddr := "localhost:50052"
+
+	engineControlConn, err := grpc.Dial(engineControlAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var engineControlClient pb.SpeedServiceClient
+
+	if err != nil {
+		log.Printf("⚠️ could not connect to engine control at %s: %v", engineControlAddr, err)
+		engineControlClient = nil
+	} else {
+		engineControlClient = pb.NewSpeedServiceClient(engineControlConn)
+		log.Printf("✅ connected to engine control at %s", engineControlAddr)
+		defer engineControlConn.Close()
+	}
+
+	go func() {
+		for v := range wsHub.SpeedUpdates {
+			simServer.speedMutex.Lock()
+			simServer.speedMultiplier = v
+			simServer.speedMutex.Unlock()
+			log.Printf("Updated server speedMultiplier -> %.3f", v)
+
+			if engineControlClient != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_, err := engineControlClient.UpdateSpeed(ctx, &pb.SpeedRequest{Multiplier: v})
+				cancel()
+
+				if err != nil {
+					log.Printf("❌ Forward to engine failed: %v", err)
+				} else {
+					log.Printf("✅ forwarded speed to engine control RPC")
+				}
+			} else {
+				log.Printf("⚠️ Cannot forward speed: engineControlClient connection is offline")
+			}
+		}
+	}()
 
 	fmt.Printf("gRPC Engine Hub listening on port %s...\n", grpcPort)
 

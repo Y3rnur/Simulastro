@@ -11,19 +11,21 @@ import (
 
 // Hub maintains the set of active clients and broadcasts messages to them
 type Hub struct {
-	clients    map[*Client]bool        // Registered active browser connections
-	Broadcast  chan *pb.TelemetryFrame // Inbound frames from the gRPC stream loop
-	Register   chan *Client            // Registration requests from the new browser tabs
-	Unregister chan *Client            // Unregistration requests when tabs close
+	clients      map[*Client]bool        // Registered active browser connections
+	Broadcast    chan *pb.TelemetryFrame // Inbound frames from the gRPC stream loop
+	Register     chan *Client            // Registration requests from the new browser tabs
+	Unregister   chan *Client            // Unregistration requests when tabs close
+	SpeedUpdates chan float64            // Speed updates from clients
 }
 
 // NewHub initializes our centralized communication matrix
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		Broadcast:  make(chan *pb.TelemetryFrame, 100), // Buffered to handle traffic bursts
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
+		clients:      make(map[*Client]bool),
+		Broadcast:    make(chan *pb.TelemetryFrame, 100), // Buffered to handle traffic bursts
+		Register:     make(chan *Client),
+		Unregister:   make(chan *Client),
+		SpeedUpdates: make(chan float64, 16),
 	}
 }
 

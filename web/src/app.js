@@ -12,8 +12,13 @@ const bodiesEl = document.getElementById('telemetryBodies');
 const playBtn = document.getElementById('playBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const historyBtn = document.getElementById('historyBtn');
+
 const timeSlider = document.getElementById('timeSlider');
 const sliderIndexDisplay = document.getElementById('sliderIndexDisplay');
+
+const speedSlider = document.getElementById('speedSlider');
+const speedLabel = document.getElementById('speedLabel');
+const presetButtons = document.querySelectorAll('.preset-buttons button');
 
 // Viewport dimensions
 const VIEW_SIZE = 800;
@@ -182,6 +187,11 @@ function renderSimulationFrame(bodies) {
     });
 }
 
+function sendSpeed(mult) {
+    const msg = JSON.stringify({ type: 'SET_SPEED', multiplier: Number(mult) });
+    socket.send(msg);
+}
+
 // UI Button actions
 playBtn.onclick = () => {
     // Lock the timeline slider while simulation is playing forward live
@@ -207,4 +217,21 @@ historyBtn.onclick = () => {
 window.addEventListener('wheel', (e) => {
     if (e.deltaY > 0) ZOOM_SCALE *= 0.9;  // Zoom out
     else ZOOM_SCALE *= 1.1;               // Zoom in
+});
+
+// Speed slider
+speedSlider.addEventListener('input', (e) => {
+    const val = Number(e.target.value);
+    speedLabel.textContent = `${val.toFixed(1)}x`;
+    sendSpeed(val);
+});
+
+// Speed preset buttons
+presetButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const val = Number(btn.dataset.speed);
+        speedSlider.value = val;
+        speedLabel.textContent = `${val.toFixed(1)}x`;
+        sendSpeed(val);
+    });
 });

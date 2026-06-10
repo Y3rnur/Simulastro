@@ -236,6 +236,103 @@ func (x *SimulationResponse) GetSimMessage() string {
 	return ""
 }
 
+// control message for speed control
+type SpeedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Multiplier    float64                `protobuf:"fixed64,1,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SpeedRequest) Reset() {
+	*x = SpeedRequest{}
+	mi := &file_simulation_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SpeedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SpeedRequest) ProtoMessage() {}
+
+func (x *SpeedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SpeedRequest.ProtoReflect.Descriptor instead.
+func (*SpeedRequest) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SpeedRequest) GetMultiplier() float64 {
+	if x != nil {
+		return x.Multiplier
+	}
+	return 0
+}
+
+type SpeedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SpeedResponse) Reset() {
+	*x = SpeedResponse{}
+	mi := &file_simulation_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SpeedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SpeedResponse) ProtoMessage() {}
+
+func (x *SpeedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SpeedResponse.ProtoReflect.Descriptor instead.
+func (*SpeedResponse) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SpeedResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *SpeedResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_simulation_proto protoreflect.FileDescriptor
 
 const file_simulation_proto_rawDesc = "" +
@@ -257,9 +354,18 @@ const file_simulation_proto_rawDesc = "" +
 	"\x12SimulationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vsim_message\x18\x02 \x01(\tR\n" +
-	"simMessage2h\n" +
+	"simMessage\".\n" +
+	"\fSpeedRequest\x12\x1e\n" +
+	"\n" +
+	"multiplier\x18\x01 \x01(\x01R\n" +
+	"multiplier\"9\n" +
+	"\rSpeedResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2h\n" +
 	"\x11SimulationService\x12S\n" +
-	"\x0fStreamTelemetry\x12\x1c.astrophysics.TelemetryFrame\x1a .astrophysics.SimulationResponse(\x01B8Z6github.com/yernur/astrophysics_simulation/server/protob\x06proto3"
+	"\x0fStreamTelemetry\x12\x1c.astrophysics.TelemetryFrame\x1a .astrophysics.SimulationResponse(\x012V\n" +
+	"\fSpeedService\x12F\n" +
+	"\vUpdateSpeed\x12\x1a.astrophysics.SpeedRequest\x1a\x1b.astrophysics.SpeedResponseB8Z6github.com/yernur/astrophysics_simulation/server/protob\x06proto3"
 
 var (
 	file_simulation_proto_rawDescOnce sync.Once
@@ -273,18 +379,22 @@ func file_simulation_proto_rawDescGZIP() []byte {
 	return file_simulation_proto_rawDescData
 }
 
-var file_simulation_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_simulation_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_simulation_proto_goTypes = []any{
 	(*BodyState)(nil),          // 0: astrophysics.BodyState
 	(*TelemetryFrame)(nil),     // 1: astrophysics.TelemetryFrame
 	(*SimulationResponse)(nil), // 2: astrophysics.SimulationResponse
+	(*SpeedRequest)(nil),       // 3: astrophysics.SpeedRequest
+	(*SpeedResponse)(nil),      // 4: astrophysics.SpeedResponse
 }
 var file_simulation_proto_depIdxs = []int32{
 	0, // 0: astrophysics.TelemetryFrame.bodies:type_name -> astrophysics.BodyState
 	1, // 1: astrophysics.SimulationService.StreamTelemetry:input_type -> astrophysics.TelemetryFrame
-	2, // 2: astrophysics.SimulationService.StreamTelemetry:output_type -> astrophysics.SimulationResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	3, // 2: astrophysics.SpeedService.UpdateSpeed:input_type -> astrophysics.SpeedRequest
+	2, // 3: astrophysics.SimulationService.StreamTelemetry:output_type -> astrophysics.SimulationResponse
+	4, // 4: astrophysics.SpeedService.UpdateSpeed:output_type -> astrophysics.SpeedResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -301,9 +411,9 @@ func file_simulation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simulation_proto_rawDesc), len(file_simulation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_simulation_proto_goTypes,
 		DependencyIndexes: file_simulation_proto_depIdxs,

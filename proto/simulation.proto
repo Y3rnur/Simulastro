@@ -32,3 +32,18 @@ message SimulationResponse {
   bool success = 1;
   string sim_message = 2;
 }
+
+// control message for speed control
+message SpeedRequest {
+  double multiplier = 1;
+}
+
+message SpeedResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+// control service by the engine to accept speed updates
+service SpeedService {
+  rpc UpdateSpeed(SpeedRequest) returns (SpeedResponse);
+}

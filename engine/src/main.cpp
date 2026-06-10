@@ -3,6 +3,8 @@
 #include <cmath>
 #include <chrono>
 #include <thread>
+#include <atomic>
+#include <memory>
 
 #include "../include/body.hpp"
 #include "simulation.pb.h"
@@ -10,6 +12,7 @@
 #include "simulation.grpc.pb.h"
 
 const double G = 6.67430e-11;   // Gravitational Constant
+std::atomic<double> g_speed_multiplier{1.0};
 
 // Structure to hold derivatives: change in position (dx, dy) and change in velocity (dvx, dvy)
 struct Derivative {
@@ -146,6 +149,21 @@ void resolve_collisions(std::vector<Body>& bodies) {
     }
 }
 
+class SpeedServiceImpl final : public astrophysics::SpeedService::Service {
+public:
+    grpc::Status UpdateSpeed(grpc::ServerContext* context,
+                            const astrophysics::SpeedRequest* request,
+                            astrophysics::SpeedResponse* response) override {
+        double v = request->multiplier();
+        if (v < 0.0) v = 0.0;
+        g_speed_multiplier.store(v);
+        response->set_ok(true);
+        response->set_message("Speed updated");
+        std::cerr << "[SpeedService] multiplier set to " << g_speed_multiplier.load() << "\n";
+        return grpc::Status::OK;
+    }
+};
+
 int main() {
     std::cout << "Astrophysics Engine initialized with RK4..." << std::endl;
 
@@ -166,7 +184,8 @@ int main() {
     double dt = 5.0;          // A balanced 5-second step to watch the approach smoothly
     */
 
-    /*  Orbit example
+    
+      // Orbit example
     double r0 = 3000.0;   // initial distance
     double M = 5e11;    // central mass
     double satellite_mass = 1e4;
@@ -176,8 +195,9 @@ int main() {
     universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
     universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
     double dt = 500.0;    // Time step size
-    */
+    
 
+    /*
       // Free fall example
     double r0 = 500.0;       // Placed reasonably close so it falls quickly
     double M = 5e11;          // Stable central mass
@@ -189,6 +209,7 @@ int main() {
     universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, 0.0, Body::radiusFromMass(satellite_mass)));
 
     double dt = 2.0;          // 2-second steps keep the RK4 math highly stable
+    */
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
@@ -198,15 +219,43 @@ int main() {
 
     std::unique_ptr<grpc::ClientWriter<astrophysics::TelemetryFrame>> writer(stub->StreamTelemetry(&context, &response));
 
+    // Speed control service thread
+    std::thread speed_service_thread([](){
+        std::string server_address("0.0.0.0:50052");
+        SpeedServiceImpl service;
+
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+        builder.RegisterService(&service);
+        std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+        std::cerr << "SpeedService listening on " << server_address << std::endl;
+        server->Wait();
+    });
+    speed_service_thread.detach();
+
     int64_t frame = 0;
     double current_simulation_time = 0.0;
+    double step_accumulator = 0.0;
+    const int MAX_SUBSTEPS = 100;
 
-    // Simulating 5 steps and capturing Protobuf telemetry
+    // Simulating steps and capturing Protobuf telemetry
     while (true) {
-        rk4_step(universe, dt);
+        double mult = g_speed_multiplier.load();
+        step_accumulator += mult;
 
-        // collision resolution
-        resolve_collisions(universe);
+        int steps = static_cast<int>(std::floor(step_accumulator));
+        if (steps > MAX_SUBSTEPS) steps = MAX_SUBSTEPS;
+
+        if (steps > 0) {
+            for (int s = 0; s < steps; ++s) {
+                rk4_step(universe, dt);
+                resolve_collisions(universe);
+                current_simulation_time += dt;
+            }
+            step_accumulator -= steps;
+        } else {
+            // no advancement in this tick
+        }
 
         astrophysics::TelemetryFrame telemetry_frame;
         telemetry_frame.set_frame_number(frame);
@@ -224,9 +273,11 @@ int main() {
             state_msg->set_alive(body.alive);
         }
 
+        /*  LOGGING FRAME RESULTS
         std::cout << "Frame: " << frame << " -> Packed: "
                     << telemetry_frame.bodies_size() << " bodies ("
                     << telemetry_frame.ByteSizeLong() << " bytes). Sending..." << std::endl;
+        */
         
         // Sending the packed frame across the socket pipe
         if (!writer->Write(telemetry_frame)) {
@@ -235,7 +286,6 @@ int main() {
         }
 
         frame++;
-        current_simulation_time += dt;
 
         // rate throttle
         std::this_thread::sleep_for(std::chrono::milliseconds(16));

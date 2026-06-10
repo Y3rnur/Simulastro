@@ -112,3 +112,109 @@ var SimulationService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "simulation.proto",
 }
+
+const (
+	SpeedService_UpdateSpeed_FullMethodName = "/astrophysics.SpeedService/UpdateSpeed"
+)
+
+// SpeedServiceClient is the client API for SpeedService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// control service by the engine to accept speed updates
+type SpeedServiceClient interface {
+	UpdateSpeed(ctx context.Context, in *SpeedRequest, opts ...grpc.CallOption) (*SpeedResponse, error)
+}
+
+type speedServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSpeedServiceClient(cc grpc.ClientConnInterface) SpeedServiceClient {
+	return &speedServiceClient{cc}
+}
+
+func (c *speedServiceClient) UpdateSpeed(ctx context.Context, in *SpeedRequest, opts ...grpc.CallOption) (*SpeedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SpeedResponse)
+	err := c.cc.Invoke(ctx, SpeedService_UpdateSpeed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SpeedServiceServer is the server API for SpeedService service.
+// All implementations must embed UnimplementedSpeedServiceServer
+// for forward compatibility.
+//
+// control service by the engine to accept speed updates
+type SpeedServiceServer interface {
+	UpdateSpeed(context.Context, *SpeedRequest) (*SpeedResponse, error)
+	mustEmbedUnimplementedSpeedServiceServer()
+}
+
+// UnimplementedSpeedServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSpeedServiceServer struct{}
+
+func (UnimplementedSpeedServiceServer) UpdateSpeed(context.Context, *SpeedRequest) (*SpeedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSpeed not implemented")
+}
+func (UnimplementedSpeedServiceServer) mustEmbedUnimplementedSpeedServiceServer() {}
+func (UnimplementedSpeedServiceServer) testEmbeddedByValue()                      {}
+
+// UnsafeSpeedServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SpeedServiceServer will
+// result in compilation errors.
+type UnsafeSpeedServiceServer interface {
+	mustEmbedUnimplementedSpeedServiceServer()
+}
+
+func RegisterSpeedServiceServer(s grpc.ServiceRegistrar, srv SpeedServiceServer) {
+	// If the following call panics, it indicates UnimplementedSpeedServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SpeedService_ServiceDesc, srv)
+}
+
+func _SpeedService_UpdateSpeed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SpeedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpeedServiceServer).UpdateSpeed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpeedService_UpdateSpeed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpeedServiceServer).UpdateSpeed(ctx, req.(*SpeedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SpeedService_ServiceDesc is the grpc.ServiceDesc for SpeedService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SpeedService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "astrophysics.SpeedService",
+	HandlerType: (*SpeedServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UpdateSpeed",
+			Handler:    _SpeedService_UpdateSpeed_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "simulation.proto",
+}
