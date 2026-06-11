@@ -32,6 +32,15 @@ let ZOOM_SCALE = 0.1;
 // Local history memory array
 let historicalTimelineCache = [];
 
+// Trail config
+let TRAIL_MAX_POINTS = 60;
+let TRAIL_OPACITY = 0.9;
+let TRAIL_MIN_OPACITY = 0.02;
+let TRAIL_LINE_WIDTH = 1.5;
+
+// Trails map
+const trails = new Map();
+
 const socket = new WebSocket('ws://localhost:8080/ws');
 
 socket.onopen = () => {
@@ -44,6 +53,78 @@ socket.onclose = () => {
     statusEl.textContent = 'Disconnected';
     statusEl.className = 'disconnected';
     console.log('❌ Telemetry connection dropped.');
+}
+
+function updateTrails(frame) {
+    if (!frame || !frame.bodies) return;
+    const idsSeen = new Set();
+
+    for (const b of frame.bodies) {
+
+        const isAlive = b.alive !== undefined && b.alive !== null ? b.alive : false;
+
+        if (!isAlive) continue;
+
+        const id = b.id;
+        idsSeen.add(id);
+
+        const x = Number(b.x);
+        const y = Number(b.y);
+
+        let arr = trails.get(id);
+        if (!arr) {
+            arr = [];
+            trails.set(id, arr);
+        }
+
+        // append current position (circular behaviour)
+        arr.push({ x, y });
+        if (arr.length > TRAIL_MAX_POINTS) arr.shift();
+    }
+
+    // cleanup of dead or gone planets
+    for (const id of Array.from(trails.keys())) {
+        if (!idsSeen.has(id)) {
+            trails.delete(id);
+        }
+    }
+}
+
+function drawTrails(ctx) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = TRAIL_LINE_WIDTH;
+
+    const worldToScreen = (wx, wy) => {
+        const sx = SCREEN_CENTER + wx * ZOOM_SCALE;
+        const sy = SCREEN_CENTER - wy * ZOOM_SCALE;
+        return { x: sx, y: sy};
+    };
+
+    for (const [id, arr] of trails.entries()) {
+        if (!arr || arr.length < 2) continue;
+
+        const n = arr.length;
+        for (let i = 1; i < n; ++i) {
+            const p0 = worldToScreen(arr[i - 1].x, arr[i - 1].y);
+            const p1 = worldToScreen(arr[i].x, arr[i].y);
+
+            // fade from tail
+            const t = i / (n - 1);
+            const alpha = TRAIL_MIN_OPACITY + (TRAIL_OPACITY - TRAIL_MIN_OPACITY) * t;
+
+            const rgb = '255,200,0';
+            ctx.strokeStyle = `rgba(${rgb}, ${alpha.toFixed(3)})`;
+
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.stroke();
+        }
+    }
+
+    ctx.restore();
 }
 
 // Data intake
@@ -93,6 +174,8 @@ socket.onmessage = (event) => {
             frameEl.textContent = telemetryFrame.frameNumber || 0;
             timeEl.textContent = (telemetryFrame.timestamp || 0).toFixed(3);
             bodiesEl.textContent = telemetryFrame.bodies ? telemetryFrame.bodies.length : 0;
+
+            updateTrails(telemetryFrame);
 
             // Initiate canvas draw sequence for received frame
             renderSimulationFrame(telemetryFrame.bodies || []);
@@ -146,6 +229,8 @@ function renderSimulationFrame(bodies) {
     ctx.moveTo(0, SCREEN_CENTER); ctx.lineTo(VIEW_SIZE, SCREEN_CENTER);
     ctx.moveTo(SCREEN_CENTER, 0); ctx.lineTo(SCREEN_CENTER, VIEW_SIZE);
     ctx.stroke();
+
+    drawTrails(ctx);
 
     bodies.forEach(body => {
         // zero value float optimization (Protobuf drops 0.0)
