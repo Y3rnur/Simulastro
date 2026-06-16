@@ -170,7 +170,8 @@ int main() {
     // Example: Setting up a Binary system
     std::vector<Body> universe;
 
-    /*  Head-on collision example
+    /*
+      // Head-on collision example
     double r0 = 3000.0;       // Initial distance
     double M = 5e11;          // Central mass
     double satellite_mass = 1e4;
@@ -181,10 +182,10 @@ int main() {
     universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
     universe.push_back(Body(2, satellite_mass, r0, 0.0, v_impact, 0.0, Body::radiusFromMass(satellite_mass)));
 
-    double dt = 5.0;          // A balanced 5-second step to watch the approach smoothly
+    double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
     */
 
-    
+    /*
       // Orbit example
     double r0 = 3000.0;   // initial distance
     double M = 5e11;    // central mass
@@ -195,9 +196,9 @@ int main() {
     universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
     universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
     double dt = 500.0;    // Time step size
-    
+    */
 
-    /*
+    
       // Free fall example
     double r0 = 500.0;       // Placed reasonably close so it falls quickly
     double M = 5e11;          // Stable central mass
@@ -209,7 +210,7 @@ int main() {
     universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, 0.0, Body::radiusFromMass(satellite_mass)));
 
     double dt = 2.0;          // 2-second steps keep the RK4 math highly stable
-    */
+    
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);

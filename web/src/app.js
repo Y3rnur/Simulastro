@@ -211,12 +211,20 @@ function renderHistoryFrameIndex(index) {
 
 // radius computing helper
 function computeDisplayRadius(body) {
-    let rawRadius = (body.radius !== undefined && body.radius !== null)
-        ? body.radius
-        : Math.cbrt(Math.max(body.mass || 1e-6, 1e-6)) * 0.0005;
+    let rawRadius;
+
+    if (body.radius !== undefined && body.radius !== null & body.radius > 0) {
+        rawRadius = body.radius;
+    } else {
+        const mass = Math.max(body.mass || 0, 1e-12);
+        const density = 2000.0;
+        const volume = (3.0 * mass) / (4.0 * Math.PI * density);
+        rawRadius = Math.cbrt(volume);
+    }
+
     let px = rawRadius * ZOOM_SCALE;
-    px = Math.max(4, Math.min(px, 35)); // clamp range (px)
-    return px;
+
+    return Math.max(4, px);
 }
 
 // Rendering pipeline
@@ -249,7 +257,7 @@ function renderSimulationFrame(bodies) {
         
         ctx.save();
 
-        if (isAlive) {
+        if (!isAlive) {
             ctx.globalAlpha = 0.35;  // dead bodies become ghostly trails
         }
 
