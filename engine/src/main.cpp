@@ -25,7 +25,7 @@ Derivative calculate_derivative(const State& s, double mass, const std::vector<B
     double ax = 0, ay = 0;
 
     for (const auto& other : all_bodies) {
-        if (other.id == my_id) continue;
+        if (other.id == my_id || !other.alive) continue;
 
         double dx = other.state.x - s.x;
         double dy = other.state.y - s.y;
@@ -49,7 +49,11 @@ void rk4_step(std::vector<Body>& bodies, double dt) {
     // Calculate k1 (at current position) for everyone
     std::vector<Derivative> k1(n);
     for (int i = 0; i < n; ++i) {
-        k1[i] = calculate_derivative(bodies[i].state, bodies[i].mass, bodies, bodies[i].id);
+        if (!bodies[i].alive) {
+            k1[i] = Derivative{0.0, 0.0, 0.0, 0.0};
+        } else {
+            k1[i] = calculate_derivative(bodies[i].state, bodies[i].mass, bodies, bodies[i].id);
+        }
     }
 
     // Creating temporary universe shifted halfway using k1
@@ -64,7 +68,11 @@ void rk4_step(std::vector<Body>& bodies, double dt) {
     // Calculate k2 (with shifted universe) for everyone
     std::vector<Derivative> k2(n);
     for (int i = 0; i < n; ++i) {
-        k2[i] = calculate_derivative(universe_k2[i].state, universe_k2[i].mass, universe_k2, universe_k2[i].id);
+        if (!bodies[i].alive) {
+            k2[i] = Derivative{0.0, 0.0, 0.0, 0.0};
+        } else {
+            k2[i] = calculate_derivative(universe_k2[i].state, universe_k2[i].mass, universe_k2, universe_k2[i].id);
+        }
     }
 
     // Creating temporary universe shifted halfway using k2
@@ -79,7 +87,11 @@ void rk4_step(std::vector<Body>& bodies, double dt) {
     // Calculate k3 (with shifted universe) for everyone
     std::vector<Derivative> k3(n);
     for (int i = 0; i < n; ++i) {
-        k3[i] = calculate_derivative(universe_k3[i].state, universe_k3[i].mass, universe_k3, universe_k3[i].id);
+        if (!bodies[i].alive) {
+            k3[i] = Derivative{0.0, 0.0, 0.0, 0.0};
+        } else {
+            k3[i] = calculate_derivative(universe_k3[i].state, universe_k3[i].mass, universe_k3, universe_k3[i].id);
+        }
     }
 
     // Creating temporary universe shifted a full step using k3
@@ -94,11 +106,21 @@ void rk4_step(std::vector<Body>& bodies, double dt) {
     // Calculate k4 (with shifted universe) for everyone
     std::vector<Derivative> k4(n);
     for (int i = 0; i < n; ++i) {
-        k4[i] = calculate_derivative(universe_k4[i].state, universe_k4[i].mass, universe_k4, universe_k4[i].id);
+        if (!bodies[i].alive) {
+            k4[i] = Derivative{0.0, 0.0, 0.0, 0.0};
+        } else {
+            k4[i] = calculate_derivative(universe_k4[i].state, universe_k4[i].mass, universe_k4, universe_k4[i].id);
+        }
     }
 
     // Updating the real universe states using the weighted average
     for (int i = 0; i < n; ++i) {
+        if (!bodies[i].alive) {
+            bodies[i].state.vx = 0.0;
+            bodies[i].state.vy = 0.0;
+            continue;
+        }
+
         bodies[i].state.x += (dt / 6.0) * (k1[i].dx + 2.0 * k2[i].dx + 2.0 * k3[i].dx + k4[i].dx);
         bodies[i].state.y += (dt / 6.0) * (k1[i].dy + 2.0 * k2[i].dy + 2.0 * k3[i].dy + k4[i].dy);
         bodies[i].state.vx += (dt / 6.0) * (k1[i].dvx + 2.0 * k2[i].dvx + 2.0 * k3[i].dvx + k4[i].dvx);
@@ -185,7 +207,7 @@ int main() {
     double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
     */
 
-    /*
+    
       // Orbit example
     double r0 = 3000.0;   // initial distance
     double M = 5e11;    // central mass
@@ -196,9 +218,21 @@ int main() {
     universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
     universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
     double dt = 500.0;    // Time step size
+    
+
+    /*
+      // Momentum example
+    double M = 5e11;              // Central star mass
+    double satellite_mass = 5e10; // Mega-satellite (10% of the star's mass!)
+    double r0 = 1000.0;           // Start reasonably close overhead
+
+    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
+    universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, -15.0, Body::radiusFromMass(satellite_mass)));
+
+    double dt = 1.0;              // High-precision 1-second steps
     */
 
-    
+    /*
       // Free fall example
     double r0 = 500.0;       // Placed reasonably close so it falls quickly
     double M = 5e11;          // Stable central mass
@@ -210,7 +244,7 @@ int main() {
     universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, 0.0, Body::radiusFromMass(satellite_mass)));
 
     double dt = 2.0;          // 2-second steps keep the RK4 math highly stable
-    
+    */
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
