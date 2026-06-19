@@ -25,6 +25,8 @@ const VIEW_SIZE = 800;
 canvas.width = VIEW_SIZE;
 canvas.height = VIEW_SIZE;
 
+let lastRenderTime = performance.now();
+
 // Coordinate mapping parameters
 const SCREEN_CENTER = VIEW_SIZE / 2;
 let ZOOM_SCALE = 0.1;
@@ -41,6 +43,23 @@ let TRAIL_LINE_WIDTH = 1.5;
 // Trails map
 const trails = new Map();
 
+// Explosion config
+const EXPLOSION_MIN_PARTICLES = 12;
+const EXPLOSION_MAX_PARTICLES = 60;
+const EXPLOSION_BASE_SPEED = 100;    // world units/sec
+const EXPLOSION_SPEED_VARIANCE = 60;
+const EXPLOSION_PARTICLE_MIN_TTL = 300;  // ms
+const EXPLOSION_PARTICLE_MAX_TTL = 2400; // ms
+const EXPLOSION_PARTICLE_MAX_SIZE = 4;
+const EXPLOSION_PARTICLE_MIN_SIZE = 1;
+const EXPLOSION_FADE_DURATION_MS = 1200;
+
+// Explosion runtime state
+const exploded = new Set();           // body IDs that already exploded (one-shot)
+const hiddenBodies = new Set();       // body IDs to skip rendering (post-explosion)
+const explosions = new Map();         // id -> { particles: [{x,y,vx,vy,ttl,age,size,color}], startedAt }
+const deathFades = new Map();         // id -> { alpha: number, remainingMs: number }
+
 const socket = new WebSocket('ws://localhost:8080/ws');
 
 socket.onopen = () => {
@@ -54,6 +73,25 @@ socket.onclose = () => {
     statusEl.className = 'disconnected';
     console.log('❌ Telemetry connection dropped.');
 }
+
+function normalizeBody(b) {
+    return {
+        id: b.id,
+        x: (b.x !== undefined && b.x !== null) ? Number(b.x) : 0.0,
+        y: (b.y !== undefined && b.y !== null) ? Number(b.y) : 0.0,
+        vx: (b.vx !== undefined && b.vx !== null) ? Number(b.vx) : 0.0,
+        vy: (b.vy !== undefined && b.vy !== null) ? Number(b.vy) : 0.0,
+        mass: (b.mass !== undefined && b.mass !== null) ? Number(b.mass) : 0.0,
+        radius: (b.radius !== undefined && b.radius !== null) ? Number(b.radius) : 0.0,
+        alive: (b.alive !== undefined && b.alive !== null) ? Boolean(b.alive) : false,
+    };
+}
+
+const worldToScreen = (wx, wy) => {
+        const sx = SCREEN_CENTER + wx * ZOOM_SCALE;
+        const sy = SCREEN_CENTER - wy * ZOOM_SCALE;
+        return { x: sx, y: sy};
+    };
 
 function updateTrails(frame) {
     if (!frame || !frame.bodies) return;
@@ -96,12 +134,6 @@ function drawTrails(ctx) {
     ctx.lineJoin = 'round';
     ctx.lineWidth = TRAIL_LINE_WIDTH;
 
-    const worldToScreen = (wx, wy) => {
-        const sx = SCREEN_CENTER + wx * ZOOM_SCALE;
-        const sy = SCREEN_CENTER - wy * ZOOM_SCALE;
-        return { x: sx, y: sy};
-    };
-
     for (const [id, arr] of trails.entries()) {
         if (!arr || arr.length < 2) continue;
 
@@ -124,6 +156,100 @@ function drawTrails(ctx) {
         }
     }
 
+    ctx.restore();
+}
+
+function triggerExplosionFromBody(body) {
+    const id = body.id;
+    if (exploded.has(id)) return;
+    exploded.add(id);
+
+    const count = Math.min(EXPLOSION_MAX_PARTICLES,
+                  Math.max(EXPLOSION_MIN_PARTICLES, Math.floor((body.radius || 1) * 0.6)));
+
+    const parts = [];
+    const inheritVx = Number(body.vx || 0) * 0.25;
+    const inheritVy = Number(body.vy || 0) * 0.25;
+
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = EXPLOSION_BASE_SPEED + (Math.random() * EXPLOSION_SPEED_VARIANCE);
+        const vx = Math.cos(angle) * speed + (Math.random() - 0.5) * 10 + inheritVx;
+        const vy = Math.sin(angle) * speed + (Math.random() - 0.5) * 10 + inheritVy;
+        const ttl = EXPLOSION_PARTICLE_MIN_TTL + Math.random() * (EXPLOSION_PARTICLE_MAX_TTL - EXPLOSION_PARTICLE_MIN_TTL);
+        const size = EXPLOSION_PARTICLE_MIN_SIZE + Math.random() * (EXPLOSION_PARTICLE_MAX_SIZE - EXPLOSION_PARTICLE_MIN_SIZE);
+
+        const color = `255,150,40`;
+
+        parts.push({
+            x: Number(body.x),
+            y: Number(body.y),
+            vx, vy,
+            ttl,
+            age: 0,
+            size,
+            color
+        });
+    }
+
+    explosions.set(id, { particles: parts, startedAt: performance.now() });
+    console.log(`💥 triggerExplosion: id=${id} particles=${parts.length}, pos=(${body.x},${body.y})`);
+}
+
+function updateExplosions(deltaMs) {
+    const doneIds = [];
+
+    for (const [id, ex] of explosions.entries()) {
+        const parts = ex.particles;
+        for (let i = parts.length - 1; i >= 0; i--) {
+            const p = parts[i];
+            const dt = deltaMs / 1000.0;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+
+            p.vx *= 0.995;
+            p.vy *= 0.995;
+            p.age += deltaMs;
+            if (p.age >= p.ttl) parts.splice(i, 1);
+        }
+        if (parts.length === 0) {
+            doneIds.push(id);
+        }
+    }
+
+    for (const id of doneIds) {
+        explosions.delete(id);
+        hiddenBodies.add(id);
+    }
+}
+
+function updateDeathFades(deltaMs) {
+    const done = [];
+    for (const [id, s] of deathFades.entries()) {
+        s.remainingMs -= deltaMs;
+        s.alpha = Math.max(0, s.remainingMs / EXPLOSION_FADE_DURATION_MS);
+        if (s.remainingMs <= 0) done.push(id);
+    }
+    for (const id of done) {
+        deathFades.delete(id);
+        hiddenBodies.add(id);
+    }
+}
+
+function drawExplosions(ctx) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [id, ex] of explosions.entries()) {
+        for (const p of ex.particles) {
+            const t = Math.max(0, 1 - p.age / p.ttl);
+            const alpha = t;    // linear fade
+            const { x: sx, y: sy } = worldToScreen(p.x, p.y);
+            ctx.fillStyle = `rgba(${p.color}, ${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
     ctx.restore();
 }
 
@@ -159,7 +285,22 @@ socket.onmessage = (event) => {
             
             console.log('LIVE', telemetryFrame.frameNumber, telemetryFrame.timestamp);
             if (telemetryFrame.bodies && telemetryFrame.bodies.length) {
-                telemetryFrame.bodies.forEach(b => {
+                for (const raw of telemetryFrame.bodies) {
+                    const b = normalizeBody(raw);
+
+                    if (!b.alive) {
+                        triggerExplosionFromBody(b);
+                        trails.delete(b.id);
+                        if (!deathFades.has(b.id) && !hiddenBodies.has(b.id)) {
+                            deathFades.set(b.id, { alpha: 1.0, remainingMs: EXPLOSION_FADE_DURATION_MS });
+                        }
+                    } else {
+                        hiddenBodies.delete(b.id);
+                        deathFades.delete(b.id);
+                    }
+                }
+                telemetryFrame.bodies.forEach(raw => {
+                    const b = normalizeBody(raw);
                     const sx = SCREEN_CENTER + (b.x * ZOOM_SCALE);
                     const sy = SCREEN_CENTER - (b.y * ZOOM_SCALE);
                     const dr = computeDisplayRadius(b);
@@ -213,7 +354,7 @@ function renderHistoryFrameIndex(index) {
 function computeDisplayRadius(body) {
     let rawRadius;
 
-    if (body.radius !== undefined && body.radius !== null & body.radius > 0) {
+    if (body.radius !== undefined && body.radius !== null && body.radius > 0) {
         rawRadius = body.radius;
     } else {
         const mass = Math.max(body.mass || 0, 1e-12);
@@ -229,6 +370,13 @@ function computeDisplayRadius(body) {
 
 // Rendering pipeline
 function renderSimulationFrame(bodies) {
+    const now = performance.now();
+    let deltaMs = now - lastRenderTime;
+    if (deltaMs > 200) deltaMs = 200;
+    lastRenderTime = now;
+
+    const normBodies = (bodies || []).map(normalizeBody);
+
     ctx.clearRect(0, 0, VIEW_SIZE, VIEW_SIZE);
 
     ctx.strokeStyle = '#1e293b';
@@ -239,40 +387,44 @@ function renderSimulationFrame(bodies) {
     ctx.stroke();
 
     drawTrails(ctx);
+    updateExplosions(deltaMs);
+    updateDeathFades(deltaMs);
+    drawExplosions(ctx);
 
-    bodies.forEach(body => {
-        // zero value float optimization (Protobuf drops 0.0)
-        const rawX = body.x !== undefined && body.x !== null ? body.x : 0.0;
-        const rawY = body.y !== undefined && body.y !== null ? body.y : 0.0;
-
-        // false boolean optimization (Protobuf drops false)
-        const isAlive = body.alive !== undefined && body.alive !== null ? body.alive : false;
+    normBodies.forEach(body => {
+        if (hiddenBodies.has(body.id)) return;
 
         // coordinate transformation
-        const screenX = SCREEN_CENTER + (rawX * ZOOM_SCALE);
-        const screenY = SCREEN_CENTER - (rawY * ZOOM_SCALE);
+        const screenX = SCREEN_CENTER + (body.x * ZOOM_SCALE);
+        const screenY = SCREEN_CENTER - (body.y * ZOOM_SCALE);
         
         // draw the planet as circle — compute radius from engine-provided radius or mass fallback
         const displayRadius = computeDisplayRadius(body);
         
         ctx.save();
 
-        if (!isAlive) {
-            ctx.globalAlpha = 0.35;  // dead bodies become ghostly trails
+        let bodyAlpha = 1.0;
+        if (!body.alive) {
+            const df = deathFades.get(body.id);
+            bodyAlpha = df ? df.alpha : 0.35;
         }
+        if (bodyAlpha <= 0) return; // skip drawing the fully faded body
+
+        ctx.save();
+        ctx.globalAlpha = bodyAlpha;
 
         ctx.beginPath();
         ctx.arc(screenX, screenY, displayRadius, 0, 2 * Math.PI);
 
-        ctx.fillStyle = isAlive ? '#38bdf8' : '#ef4444';
-        ctx.shadowBlur = isAlive ? 12 : 0;
+        ctx.fillStyle = body.alive ? '#38bdf8' : '#ef4444';
+        ctx.shadowBlur = body.alive ? 12 : 0;
         ctx.shadowColor = '#0284c7';
 
         ctx.fill();
         ctx.closePath();
 
         ctx.shadowBlur = 0;
-        ctx.fillStyle = isAlive ? '#94a3b8' : '#78716c';
+        ctx.fillStyle = body.alive ? '#94a3b8' : '#78716c';
         ctx.font = '10px monospace';
         ctx.fillText(`ID:${body.id}${!body.alive ? ' (DEAD)' : ''}`, screenX + displayRadius + 6, screenY + 4);
 

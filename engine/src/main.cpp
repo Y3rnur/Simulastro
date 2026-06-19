@@ -207,7 +207,7 @@ int main() {
     double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
     */
 
-    
+    /*
       // Orbit example
     double r0 = 3000.0;   // initial distance
     double M = 5e11;    // central mass
@@ -218,9 +218,9 @@ int main() {
     universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
     universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
     double dt = 500.0;    // Time step size
-    
+    */
 
-    /*
+    
       // Momentum example
     double M = 5e11;              // Central star mass
     double satellite_mass = 5e10; // Mega-satellite (10% of the star's mass!)
@@ -230,7 +230,7 @@ int main() {
     universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, -15.0, Body::radiusFromMass(satellite_mass)));
 
     double dt = 1.0;              // High-precision 1-second steps
-    */
+    
 
     /*
       // Free fall example
