@@ -192,59 +192,20 @@ int main() {
     // Example: Setting up a Binary system
     std::vector<Body> universe;
 
-    /*
-      // Head-on collision example
+    // SIMULATION EXAMPLES/CONFIGURATIONS GO BELOW HERE:
     double r0 = 3000.0;       // Initial distance
-    double M = 5e11;          // Central mass
-    double satellite_mass = 1e4;
+        double M = 5e11;          // Central mass
+        double satellite_mass = 1e4;
 
-    // Direct head-on collision: Vx is negative, pointing straight to origin
-    double v_impact = -5.0;   // Moving fast straight toward the center star
+        // Direct head-on collision: Vx is negative, pointing straight to origin
+        double v_impact = -5.0;   // Moving fast straight toward the center star
 
-    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
-    universe.push_back(Body(2, satellite_mass, r0, 0.0, v_impact, 0.0, Body::radiusFromMass(satellite_mass)));
+        universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0));
+        universe.push_back(Body(2, satellite_mass, r0, 100.0, v_impact, 0.0));
 
-    double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
-    */
+                 // A balanced 2-second step to watch the approach smoothly
 
-    /*
-      // Orbit example
-    double r0 = 3000.0;   // initial distance
-    double M = 5e11;    // central mass
-    double satellite_mass = 1e4;
-    double v_escape = std::sqrt(2.0 * G * M / r0);
-    double v_init = 0.707 * v_escape;
-
-    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
-    universe.push_back(Body(2, satellite_mass, r0, 0.0, 0.0, v_init, Body::radiusFromMass(satellite_mass)));
-    double dt = 500.0;    // Time step size
-    */
-
-    
-      // Momentum example
-    double M = 5e11;              // Central star mass
-    double satellite_mass = 5e10; // Mega-satellite (10% of the star's mass!)
-    double r0 = 1000.0;           // Start reasonably close overhead
-
-    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
-    universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, -15.0, Body::radiusFromMass(satellite_mass)));
-
-    double dt = 1.0;              // High-precision 1-second steps
-    
-
-    /*
-      // Free fall example
-    double r0 = 500.0;       // Placed reasonably close so it falls quickly
-    double M = 5e11;          // Stable central mass
-    double satellite_mass = 1e10; // Mega-satellite so it has a visible radius!
-
-    // Let's drop it straight down from the top! 
-    // x = 0, y = r0, vx = 0, vy = 0 -> Pure gravitational freefall
-    universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0, Body::radiusFromMass(M)));
-    universe.push_back(Body(2, satellite_mass, 0.0, r0, 0.0, 0.0, Body::radiusFromMass(satellite_mass)));
-
-    double dt = 2.0;          // 2-second steps keep the RK4 math highly stable
-    */
+    double dt = 1.0;
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);

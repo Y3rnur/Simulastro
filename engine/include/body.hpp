@@ -17,8 +17,10 @@ public:
     bool alive;
     State state;
 
-    Body(int id, double m, double x, double y, double vx, double vy, double r = 1.0)
-        : id(id), mass(m), radius(r), alive(true), state({x, y, vx, vy}) {}
+    Body(int id, double m, double x, double y, double vx, double vy, double r = -1.0)
+        : id(id), mass(m), alive(true), state({x, y, vx, vy}) {
+            radius = r < 0 ? radiusFromMass(m) : r;
+        }
 
     // radius = cbrt( 3 * mass / (4 * pi * density) )
     // Default density chosen as 2000 kg/m^3 (rocky body)

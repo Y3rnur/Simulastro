@@ -60,6 +60,14 @@ const hiddenBodies = new Set();       // body IDs to skip rendering (post-explos
 const explosions = new Map();         // id -> { particles: [{x,y,vx,vy,ttl,age,size,color}], startedAt }
 const deathFades = new Map();         // id -> { alpha: number, remainingMs: number }
 
+// Auto-zoom config
+const AUTO_ZOOM_TARGET_FRACTION = 0.05;
+const AUTO_ZOOM_MIN = 0.000001;
+const AUTO_ZOOM_MAX = 10.0;
+
+let autoZoomDone = false;
+let userAdjustedZoom = false;
+
 const socket = new WebSocket('ws://localhost:8080/ws');
 
 socket.onopen = () => {
@@ -157,6 +165,29 @@ function drawTrails(ctx) {
     }
 
     ctx.restore();
+}
+
+// build per-body trails for a history frame index
+function buildHistoryTrailsForIndex(idx) {
+    trails.clear();
+    if (!historicalTimelineCache || historicalTimelineCache.length === 0) return;
+
+    const start = Math.max(0, idx - TRAIL_MAX_POINTS + 1);
+    for (let i = start; i <= idx; i++) {
+        const frame = historicalTimelineCache[i];
+        if (!frame || !frame.bodies) continue;
+        for (const raw of frame.bodies) {
+            const b = normalizeBody(raw);
+            let arr = trails.get(b.id);
+            if (!arr) {
+                arr = [];
+                trails.set(b.id, arr);
+            }
+            arr.push({ x: b.x, y: b.y });
+            
+            if (arr.length > TRAIL_MAX_POINTS) arr.shift();
+        }
+    }
 }
 
 function triggerExplosionFromBody(body) {
@@ -263,6 +294,12 @@ socket.onmessage = (event) => {
             console.log(`🕒 History payload received. Captured ${packet.frames.length} frames.`);
             historicalTimelineCache = packet.frames || [];
 
+            // clear live visual state so live traces don't pollute history view
+            trails.clear();
+            explosions.clear();
+            deathFades.clear();
+            console.log("🧹 Cleared live trails/explosions before rendering history");
+
             if (historicalTimelineCache.length > 0) {
                 // Unlock and configure range timeline slider
                 timeSlider.disabled = false;
@@ -273,6 +310,11 @@ socket.onmessage = (event) => {
 
                 updateSliderLabel(historicalTimelineCache.length - 1, historicalTimelineCache.length);
 
+                const last = historicalTimelineCache[historicalTimelineCache.length - 1];
+                if (last && last.bodies && last.bodies.length) {
+                    autoFitZoomForBodies(last.bodies);
+                }
+
                 // instantly render the final frame of downloaded timeline
                 renderHistoryFrameIndex(historicalTimelineCache.length - 1);
             }
@@ -282,6 +324,10 @@ socket.onmessage = (event) => {
         // Handle live streaming updates
         if (packet.type === "LIVE") {
             const telemetryFrame = packet.payload;
+
+            if (!autoZoomDone && telemetryFrame.bodies && telemetryFrame.bodies.length) {
+                autoFitZoomForBodies(telemetryFrame.bodies);
+            }
             
             console.log('LIVE', telemetryFrame.frameNumber, telemetryFrame.timestamp);
             if (telemetryFrame.bodies && telemetryFrame.bodies.length) {
@@ -319,7 +365,7 @@ socket.onmessage = (event) => {
             updateTrails(telemetryFrame);
 
             // Initiate canvas draw sequence for received frame
-            renderSimulationFrame(telemetryFrame.bodies || []);
+            renderSimulationFrame(telemetryFrame.bodies || [], false);
         }
     } catch (err) {
         console.error("❌ Telemetry Parsing Error:", err);
@@ -346,8 +392,11 @@ function renderHistoryFrameIndex(index) {
     timeEl.textContent = (targetFrame.timestamp || 0).toFixed(3);
     bodiesEl.textContent = targetFrame.bodies ? targetFrame.bodies.length : 0;
 
+    // build trails that reflect historical motion
+    buildHistoryTrailsForIndex(index);
+
     // Render coordinates using canvas loop
-    renderSimulationFrame(targetFrame.bodies || []);
+    renderSimulationFrame(targetFrame.bodies || [], true);
 }
 
 // radius computing helper
@@ -368,8 +417,42 @@ function computeDisplayRadius(body) {
     return Math.max(4, px);
 }
 
+// helper to compute radius
+function rawRadiusFromBody(body) {
+    if (!body) return 0;
+    if (body.radius !== undefined && body.radius !== null && body.radius > 0) {
+        return Number(body.radius);
+    }
+    const mass = Math.max(Number(body.mass || 0), 1e-12);
+    const density = 2000.0;
+    const volume = (3.0 * mass) / (4.0 * Math.PI * density);
+    return Math.cbrt(volume);
+}
+
+// auto-fit function
+function autoFitZoomForBodies(bodies, targetFraction = AUTO_ZOOM_TARGET_FRACTION) {
+    if (userAdjustedZoom) return;
+    if (!bodies || !bodies.length) return;
+
+    let maxRaw = 0;
+    for (const raw of bodies) {
+        const b = normalizeBody(raw);
+        const r = rawRadiusFromBody(b);
+        if (r > maxRaw) maxRaw = r;
+    }
+    if (maxRaw <= 0) return;
+
+    const targetPx = VIEW_SIZE * targetFraction;
+    let newScale = targetPx / maxRaw;
+    newScale = Math.max(AUTO_ZOOM_MIN, Math.min(AUTO_ZOOM_MAX, newScale));
+
+    ZOOM_SCALE = newScale;
+
+    autoZoomDone = true;
+}
+
 // Rendering pipeline
-function renderSimulationFrame(bodies) {
+function renderSimulationFrame(bodies, isHistory = false) {
     const now = performance.now();
     let deltaMs = now - lastRenderTime;
     if (deltaMs > 200) deltaMs = 200;
@@ -386,13 +469,17 @@ function renderSimulationFrame(bodies) {
     ctx.moveTo(SCREEN_CENTER, 0); ctx.lineTo(SCREEN_CENTER, VIEW_SIZE);
     ctx.stroke();
 
-    drawTrails(ctx);
-    updateExplosions(deltaMs);
-    updateDeathFades(deltaMs);
-    drawExplosions(ctx);
+    if (!isHistory) {
+        drawTrails(ctx);
+        updateExplosions(deltaMs);
+        updateDeathFades(deltaMs);
+        drawExplosions(ctx);
+    } else {
+        drawTrails(ctx);
+    }
 
     normBodies.forEach(body => {
-        if (hiddenBodies.has(body.id)) return;
+        if (!isHistory && hiddenBodies.has(body.id)) return;
 
         // coordinate transformation
         const screenX = SCREEN_CENTER + (body.x * ZOOM_SCALE);
@@ -404,10 +491,13 @@ function renderSimulationFrame(bodies) {
         ctx.save();
 
         let bodyAlpha = 1.0;
-        if (!body.alive) {
-            const df = deathFades.get(body.id);
-            bodyAlpha = df ? df.alpha : 0.35;
+        if (!isHistory) {
+            if (!body.alive) {
+                const df = deathFades.get(body.id);
+                bodyAlpha = df ? df.alpha : 0.35;
+            }
         }
+
         if (bodyAlpha <= 0) return; // skip drawing the fully faded body
 
         ctx.save();
@@ -460,8 +550,10 @@ historyBtn.onclick = () => {
 
 // Add a simple window event listener or bind to an input slider to zoom on the fly
 window.addEventListener('wheel', (e) => {
+    userAdjustedZoom = true;
     if (e.deltaY > 0) ZOOM_SCALE *= 0.9;  // Zoom out
     else ZOOM_SCALE *= 1.1;               // Zoom in
+    ZOOM_SCALE = Math.max(AUTO_ZOOM_MIN, Math.min(AUTO_ZOOM_MAX, ZOOM_SCALE));
 });
 
 // Speed slider
