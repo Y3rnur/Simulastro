@@ -67,6 +67,7 @@ const AUTO_ZOOM_MAX = 10.0;
 
 let autoZoomDone = false;
 let userAdjustedZoom = false;
+let currentHistoryIndex = null;
 
 const socket = new WebSocket('ws://localhost:8080/ws');
 
@@ -392,6 +393,7 @@ function renderHistoryFrameIndex(index) {
     timeEl.textContent = (targetFrame.timestamp || 0).toFixed(3);
     bodiesEl.textContent = targetFrame.bodies ? targetFrame.bodies.length : 0;
 
+    currentHistoryIndex = index;
     // build trails that reflect historical motion
     buildHistoryTrailsForIndex(index);
 
@@ -533,6 +535,7 @@ playBtn.onclick = () => {
     timeSlider.disabled = true;
     timeSlider.style.cursor = "not-allowed";
     historyBtn.disabled = true;
+    currentHistoryIndex = null;
     socket.send("PLAY");
     console.log("📤 Sent Command: PLAY");
 };
@@ -554,6 +557,12 @@ window.addEventListener('wheel', (e) => {
     if (e.deltaY > 0) ZOOM_SCALE *= 0.9;  // Zoom out
     else ZOOM_SCALE *= 1.1;               // Zoom in
     ZOOM_SCALE = Math.max(AUTO_ZOOM_MIN, Math.min(AUTO_ZOOM_MAX, ZOOM_SCALE));
+
+    if (currentHistoryIndex !== null && historicalTimelineCache[currentHistoryIndex]) {
+        buildHistoryTrailsForIndex(currentHistoryIndex);
+        const frame = historicalTimelineCache[currentHistoryIndex];
+        renderSimulationFrame(frame.bodies || [], true);
+    }
 });
 
 // Speed slider
