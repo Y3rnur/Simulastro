@@ -1,3 +1,8 @@
+// website configurations
+const wsProto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+const wsUrl = wsProto + location.host + '/ws';
+const socket = new WebSocket(wsUrl);
+
 // Canvas configurations
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
@@ -46,7 +51,7 @@ const trails = new Map();
 // Explosion config
 const EXPLOSION_MIN_PARTICLES = 12;
 const EXPLOSION_MAX_PARTICLES = 60;
-const EXPLOSION_BASE_SPEED = 100;    // world units/sec
+const EXPLOSION_BASE_SPEED = 150;    // world units/sec
 const EXPLOSION_SPEED_VARIANCE = 60;
 const EXPLOSION_PARTICLE_MIN_TTL = 300;  // ms
 const EXPLOSION_PARTICLE_MAX_TTL = 2400; // ms
@@ -68,8 +73,6 @@ const AUTO_ZOOM_MAX = 10.0;
 let autoZoomDone = false;
 let userAdjustedZoom = false;
 let currentHistoryIndex = null;
-
-const socket = new WebSocket('ws://localhost:8080/ws');
 
 socket.onopen = () => {
     statusEl.textContent = 'Connected';
@@ -205,7 +208,8 @@ function triggerExplosionFromBody(body) {
 
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = EXPLOSION_BASE_SPEED + (Math.random() * EXPLOSION_SPEED_VARIANCE);
+        const intensity = Math.sqrt(body.radius || 10) * 2;
+        const speed = (EXPLOSION_BASE_SPEED + (Math.random() * EXPLOSION_SPEED_VARIANCE)) * intensity;
         const vx = Math.cos(angle) * speed + (Math.random() - 0.5) * 10 + inheritVx;
         const vy = Math.sin(angle) * speed + (Math.random() - 0.5) * 10 + inheritVy;
         const ttl = EXPLOSION_PARTICLE_MIN_TTL + Math.random() * (EXPLOSION_PARTICLE_MAX_TTL - EXPLOSION_PARTICLE_MIN_TTL);
@@ -229,29 +233,24 @@ function triggerExplosionFromBody(body) {
 }
 
 function updateExplosions(deltaMs) {
-    const doneIds = [];
-
     for (const [id, ex] of explosions.entries()) {
         const parts = ex.particles;
-        for (let i = parts.length - 1; i >= 0; i--) {
-            const p = parts[i];
-            const dt = deltaMs / 1000.0;
+        const dt = deltaMs / 1000.0;
+
+        for (let p of parts) {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-
             p.vx *= 0.995;
             p.vy *= 0.995;
             p.age += deltaMs;
-            if (p.age >= p.ttl) parts.splice(i, 1);
         }
-        if (parts.length === 0) {
-            doneIds.push(id);
-        }
-    }
 
-    for (const id of doneIds) {
-        explosions.delete(id);
-        hiddenBodies.add(id);
+        ex.particles = parts.filter(p => p.age < p.ttl);
+
+        if (ex.particles.length === 0) {
+            explosions.delete(id);
+            hiddenBodies.add(id);
+        }
     }
 }
 
@@ -329,7 +328,7 @@ socket.onmessage = (event) => {
             if (!autoZoomDone && telemetryFrame.bodies && telemetryFrame.bodies.length) {
                 autoFitZoomForBodies(telemetryFrame.bodies);
             }
-            
+
             console.log('LIVE', telemetryFrame.frameNumber, telemetryFrame.timestamp);
             if (telemetryFrame.bodies && telemetryFrame.bodies.length) {
                 for (const raw of telemetryFrame.bodies) {

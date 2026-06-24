@@ -112,6 +112,9 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
+	fs := http.FileServer(http.Dir("../../../web"))
+	http.Handle("/", fs)
+
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(wsHub, globalCache, w, r)
 	})

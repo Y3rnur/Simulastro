@@ -201,11 +201,9 @@ int main() {
         double v_impact = -5.0;   // Moving fast straight toward the center star
 
         universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0));
-        universe.push_back(Body(2, satellite_mass, r0, 100.0, v_impact, 0.0));
+        universe.push_back(Body(2, satellite_mass, r0, 0.0, v_impact, 0.0));
 
-                 // A balanced 2-second step to watch the approach smoothly
-
-    double dt = 1.0;
+        double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
