@@ -74,6 +74,25 @@ let autoZoomDone = false;
 let userAdjustedZoom = false;
 let currentHistoryIndex = null;
 
+let currentLiveFrame = null;
+let currentHistoryFrame = null;
+
+// Placement mode state
+let placementMode = true;
+let placementBodies = [];       // local array of placed bodies
+let nextBodyId = 1000;          // start id for user-placed bodies
+let placementPos = null;        // first click world pos {x, y}
+let placementHoverPos = null;
+const DENSITY = 2000.0;         // matching with engine's density value
+
+// Placement modal bindings
+const placementToggle = document.getElementById('placementToggle');
+const massSlider = document.getElementById('massSlider');
+const massLabel = document.getElementById('massLabel');
+const velocityScaleInput = document.getElementById('velocityScale');
+const uploadSceneBtn = document.getElementById('uploadSceneBtn');
+const clearPlacementBtn = document.getElementById('clearPlacementBtn');
+
 socket.onopen = () => {
     statusEl.textContent = 'Connected';
     statusEl.className = 'connected';
@@ -104,6 +123,81 @@ const worldToScreen = (wx, wy) => {
         const sy = SCREEN_CENTER - wy * ZOOM_SCALE;
         return { x: sx, y: sy};
     };
+
+function velocityFromDrag(start, end, scale) {
+    return {
+        vx: (end.x - start.x) * scale,
+        vy: (end.y - start.y) * scale
+    };
+}
+
+function screenToWorld(sx, sy) {
+    return {
+        x: (sx - SCREEN_CENTER) / ZOOM_SCALE,
+        y: (SCREEN_CENTER - sy) / ZOOM_SCALE
+    };
+}
+
+function massFromLog(logVal) {
+    return Math.pow(10, logVal);
+}
+
+function radiusFromMass(mass) {
+    const volume = (3.0 * mass) / (4.0 * Math.PI * DENSITY);
+    return Math.cbrt(Math.max(volume, 0));
+}
+
+canvas.addEventListener('pointermove', (ev) => {
+    if (!placementMode || !placementPos) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left;
+    const sy = ev.clientY - rect.top;
+
+    placementHoverPos = screenToWorld(sx, sy);
+});
+
+canvas.addEventListener('pointerleave', () => {
+    placementHoverPos = null;
+});
+
+canvas.addEventListener('pointerdown', (ev) => {
+    if (!placementToggle.checked) return;   // only works in placement mode
+
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left;
+    const sy = ev.clientY - rect.top;
+    const world = screenToWorld(sx, sy);
+
+    if (!placementPos) {
+        // first click -> set base position and preview
+        placementPos = world;
+        placementHoverPos = world;
+        return;
+    }
+
+    // second click -> set velocity
+    const velocityScale = Number(velocityScaleInput.value) || 0.01;
+    const velocity = velocityFromDrag(placementPos, world, velocityScale);
+
+    const logMass = Number(massSlider.value);
+    const mass = massFromLog(logMass);
+    const radius = radiusFromMass(mass);
+
+    placementBodies.push({
+        id: nextBodyId++,
+        mass,
+        radius,
+        x: placementPos.x,
+        y: placementPos.y,
+        vx: velocity.vx,
+        vy: velocity.vy,
+        alive: true
+    });
+    
+    placementPos = null;
+    placementHoverPos = null;
+});
 
 function updateTrails(frame) {
     if (!frame || !frame.bodies) return;
@@ -286,89 +380,24 @@ function drawExplosions(ctx) {
 
 // Data intake
 socket.onmessage = (event) => {
-    try {
-        const packet = JSON.parse(event.data);
+    const packet = JSON.parse(event.data);
 
-        // Handle timeline history blocks
-        if (packet.type === "HISTORY") {
-            console.log(`🕒 History payload received. Captured ${packet.frames.length} frames.`);
-            historicalTimelineCache = packet.frames || [];
+    if (packet.type === 'LIVE') {
+        currentLiveFrame = packet.payload;
+        currentHistoryFrame = null;
+        updateTrails(packet.payload);
 
-            // clear live visual state so live traces don't pollute history view
-            trails.clear();
-            explosions.clear();
-            deathFades.clear();
-            console.log("🧹 Cleared live trails/explosions before rendering history");
-
-            if (historicalTimelineCache.length > 0) {
-                // Unlock and configure range timeline slider
-                timeSlider.disabled = false;
-                timeSlider.style.cursor = "pointer";
-                timeSlider.min = 0;
-                timeSlider.max = historicalTimelineCache.length - 1;
-                timeSlider.value = historicalTimelineCache.length - 1; // Default to final snapshot position
-
-                updateSliderLabel(historicalTimelineCache.length - 1, historicalTimelineCache.length);
-
-                const last = historicalTimelineCache[historicalTimelineCache.length - 1];
-                if (last && last.bodies && last.bodies.length) {
-                    autoFitZoomForBodies(last.bodies);
-                }
-
-                // instantly render the final frame of downloaded timeline
-                renderHistoryFrameIndex(historicalTimelineCache.length - 1);
-            }
-            return;
+        if (!autoZoomDone && packet.payload.bodies && packet.payload.bodies.length) {
+            autoFitZoomForBodies(packet.payload.bodies);
         }
+        return;
+    }
 
-        // Handle live streaming updates
-        if (packet.type === "LIVE") {
-            const telemetryFrame = packet.payload;
-
-            if (!autoZoomDone && telemetryFrame.bodies && telemetryFrame.bodies.length) {
-                autoFitZoomForBodies(telemetryFrame.bodies);
-            }
-
-            console.log('LIVE', telemetryFrame.frameNumber, telemetryFrame.timestamp);
-            if (telemetryFrame.bodies && telemetryFrame.bodies.length) {
-                for (const raw of telemetryFrame.bodies) {
-                    const b = normalizeBody(raw);
-
-                    if (!b.alive) {
-                        triggerExplosionFromBody(b);
-                        trails.delete(b.id);
-                        if (!deathFades.has(b.id) && !hiddenBodies.has(b.id)) {
-                            deathFades.set(b.id, { alpha: 1.0, remainingMs: EXPLOSION_FADE_DURATION_MS });
-                        }
-                    } else {
-                        hiddenBodies.delete(b.id);
-                        deathFades.delete(b.id);
-                    }
-                }
-                telemetryFrame.bodies.forEach(raw => {
-                    const b = normalizeBody(raw);
-                    const sx = SCREEN_CENTER + (b.x * ZOOM_SCALE);
-                    const sy = SCREEN_CENTER - (b.y * ZOOM_SCALE);
-                    const dr = computeDisplayRadius(b);
-                    
-                    console.log(`BODY id=${b.id} x=${b.x} y=${b.y} sx=${sx.toFixed(2)} sy=${sy.toFixed(2)} r=${dr.toFixed(2)} alive=${b.alive}`);
-                });
-            } else {
-                console.log('NO BODIES in payload');
-            }
-
-            // Update control panel stats dashboard fields
-            frameEl.textContent = telemetryFrame.frameNumber || 0;
-            timeEl.textContent = (telemetryFrame.timestamp || 0).toFixed(3);
-            bodiesEl.textContent = telemetryFrame.bodies ? telemetryFrame.bodies.length : 0;
-
-            updateTrails(telemetryFrame);
-
-            // Initiate canvas draw sequence for received frame
-            renderSimulationFrame(telemetryFrame.bodies || [], false);
-        }
-    } catch (err) {
-        console.error("❌ Telemetry Parsing Error:", err);
+    if (packet.type === 'HISTORY') {
+        historicalTimelineCache = packet.frames || [];
+        currentHistoryFrame = historicalTimelineCache[historicalTimelineCache.length - 1] || null;
+        currentLiveFrame = null;
+        return;
     }
 };
 
@@ -376,28 +405,20 @@ socket.onmessage = (event) => {
 timeSlider.oninput = (e) => {
     const selectedIndex = parseInt(e.target.value, 10);
     updateSliderLabel(selectedIndex, historicalTimelineCache.length);
-    renderHistoryFrameIndex(selectedIndex);
+
+    currentHistoryIndex = selectedIndex;
+    currentHistoryFrame = historicalTimelineCache[selectedIndex];
+
+    // Sync info dashboard with historical point values
+    frameEl.textContent = currentHistoryFrame.frameNumber || 0;
+    timeEl.textContent = (currentHistoryFrame.timestamp || 0).toFixed(3);
+    bodiesEl.textContent = currentHistoryFrame.bodies ? currentHistoryFrame.bodies.length : 0;
+
+    buildHistoryTrailsForIndex(selectedIndex);
 }
 
 function updateSliderLabel(current, total) {
     sliderIndexDisplay.textContent = `${current + 1}/${total}`;
-}
-
-function renderHistoryFrameIndex(index) {
-    const targetFrame = historicalTimelineCache[index];
-    if (!targetFrame) return;
-
-    // Sync info dashboard with historical point values
-    frameEl.textContent = targetFrame.frameNumber || 0;
-    timeEl.textContent = (targetFrame.timestamp || 0).toFixed(3);
-    bodiesEl.textContent = targetFrame.bodies ? targetFrame.bodies.length : 0;
-
-    currentHistoryIndex = index;
-    // build trails that reflect historical motion
-    buildHistoryTrailsForIndex(index);
-
-    // Render coordinates using canvas loop
-    renderSimulationFrame(targetFrame.bodies || [], true);
 }
 
 // radius computing helper
@@ -452,76 +473,133 @@ function autoFitZoomForBodies(bodies, targetFraction = AUTO_ZOOM_TARGET_FRACTION
     autoZoomDone = true;
 }
 
-// Rendering pipeline
-function renderSimulationFrame(bodies, isHistory = false) {
-    const now = performance.now();
-    let deltaMs = now - lastRenderTime;
-    if (deltaMs > 200) deltaMs = 200;
-    lastRenderTime = now;
-
-    const normBodies = (bodies || []).map(normalizeBody);
-
+function renderSceneBase() {
     ctx.clearRect(0, 0, VIEW_SIZE, VIEW_SIZE);
 
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, SCREEN_CENTER); ctx.lineTo(VIEW_SIZE, SCREEN_CENTER);
-    ctx.moveTo(SCREEN_CENTER, 0); ctx.lineTo(SCREEN_CENTER, VIEW_SIZE);
-    ctx.stroke();
+    ctx.moveTo(0, SCREEN_CENTER);
+    ctx.lineTo(VIEW_SIZE, SCREEN_CENTER);
+    ctx.moveTo(SCREEN_CENTER, 0);
+    ctx.lineTo(SCREEN_CENTER, VIEW_SIZE);
+    ctx.stroke(); 
+}
 
-    if (!isHistory) {
-        drawTrails(ctx);
-        updateExplosions(deltaMs);
-        updateDeathFades(deltaMs);
-        drawExplosions(ctx);
-    } else {
-        drawTrails(ctx);
+function drawPlacementOverlay() {
+    if (!placementMode) return;
+
+    // draw placed bodies
+    for (const body of placementBodies) {
+        const { x: sx, y: sy } = worldToScreen(body.x, body.y);
+        const radiusPx = Math.max(4, body.radius * ZOOM_SCALE);
+
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = '#7c3aed';
+        ctx.beginPath();
+        ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     }
 
-    normBodies.forEach(body => {
-        if (!isHistory && hiddenBodies.has(body.id)) return;
+    // draw preview (if first point set)
+    if (placementPos) {
+        const previewRadius = radiusFromMass(massFromLog(Number(massSlider.value)));
+        const previewScreen = worldToScreen(placementPos.x, placementPos.y);
+        const previewRadiusPx = Math.max(4, previewRadius * ZOOM_SCALE);
 
-        // coordinate transformation
-        const screenX = SCREEN_CENTER + (body.x * ZOOM_SCALE);
-        const screenY = SCREEN_CENTER - (body.y * ZOOM_SCALE);
-        
-        // draw the planet as circle — compute radius from engine-provided radius or mass fallback
-        const displayRadius = computeDisplayRadius(body);
-        
         ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(previewScreen.x, previewScreen.y, previewRadiusPx, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    if (placementPos && placementHoverPos) {
+        const start = worldToScreen(placementPos.x, placementPos.y);
+        const end = worldToScreen(placementHoverPos.x, placementHoverPos.y);
+
+        ctx.save();
+        ctx.strokeStyle = '#22c55e';
+        ctx.fillStyle = '#22c55e';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        const headLen = 12;
+
+        ctx.beginPath();
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(end.x - headLen * Math.cos(angle - Math.PI / 6), end.y - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(end.x - headLen * Math.cos(angle + Math.PI / 6), end.y - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+function renderBodiesFromFrame(frameBodies, isHistory = false) {
+    for (const raw of frameBodies || []) {
+        const body = normalizeBody(raw);
 
         let bodyAlpha = 1.0;
-        if (!isHistory) {
-            if (!body.alive) {
-                const df = deathFades.get(body.id);
-                bodyAlpha = df ? df.alpha : 0.35;
-            }
+        if (!isHistory && !body.alive) {
+            const df = deathFades.get(body.id);
+            bodyAlpha = df ? df.alpha : 0.35;
         }
+        if (bodyAlpha <= 0) continue;
 
-        if (bodyAlpha <= 0) return; // skip drawing the fully faded body
+        const { x: sx, y: sy } = worldToScreen(body.x, body.y);
+        const radiusPx = computeDisplayRadius(body);
 
         ctx.save();
         ctx.globalAlpha = bodyAlpha;
 
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, displayRadius, 0, 2 * Math.PI);
-
         ctx.fillStyle = body.alive ? '#38bdf8' : '#ef4444';
         ctx.shadowBlur = body.alive ? 12 : 0;
         ctx.shadowColor = '#0284c7';
-
+        ctx.beginPath();
+        ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
         ctx.fill();
-        ctx.closePath();
 
         ctx.shadowBlur = 0;
         ctx.fillStyle = body.alive ? '#94a3b8' : '#78716c';
         ctx.font = '10px monospace';
-        ctx.fillText(`ID:${body.id}${!body.alive ? ' (DEAD)' : ''}`, screenX + displayRadius + 6, screenY + 4);
+        ctx.fillText(`ID:${body.id}${!body.alive ? ' (DEAD)' : ''}`, sx + radiusPx + 6, sy + 4)
 
         ctx.restore();
-    });
+    }
 }
+
+// main rendering loop logic
+function renderLoop(now) {
+    const deltaMs = Math.min(now - lastRenderTime, 200);
+    lastRenderTime = now;
+
+    renderSceneBase();
+    drawTrails(ctx);
+
+    if (currentHistoryFrame) {
+        renderBodiesFromFrame(currentHistoryFrame.bodies, true);
+    } else if (currentLiveFrame) {
+        updateExplosions(deltaMs);
+        updateDeathFades(deltaMs);
+        drawExplosions(ctx);
+        renderBodiesFromFrame(currentLiveFrame.bodies, false);
+    }
+
+    drawPlacementOverlay();
+    requestAnimationFrame(renderLoop);
+}
+
+requestAnimationFrame(renderLoop);
 
 function sendSpeed(mult) {
     const msg = JSON.stringify({ type: 'SET_SPEED', multiplier: Number(mult) });
@@ -530,23 +608,29 @@ function sendSpeed(mult) {
 
 // UI Button actions
 playBtn.onclick = () => {
+    // upload placement bodies
+    if (placementBodies.length > 0) {
+        sendUploadScene(() => sendControl('PLAY'));
+    } else {
+        sendControl('PLAY');
+    }
+
     // Lock the timeline slider while simulation is playing forward live
     timeSlider.disabled = true;
     timeSlider.style.cursor = "not-allowed";
     historyBtn.disabled = true;
     currentHistoryIndex = null;
-    socket.send("PLAY");
     console.log("📤 Sent Command: PLAY");
 };
 
 pauseBtn.onclick = () => {
-    socket.send("PAUSE");
+    sendControl('PAUSE');
     historyBtn.disabled = false;
     console.log("📤 Sent Command: PAUSE")
 };
 
 historyBtn.onclick = () => {
-    socket.send("FETCH_HISTORY");
+    socket.send(JSON.stringify({ type: 'FETCH_HISTORY' }));
     console.log("📤 Sent Command: FETCH_HISTORY");
 };
 
@@ -557,10 +641,8 @@ window.addEventListener('wheel', (e) => {
     else ZOOM_SCALE *= 1.1;               // Zoom in
     ZOOM_SCALE = Math.max(AUTO_ZOOM_MIN, Math.min(AUTO_ZOOM_MAX, ZOOM_SCALE));
 
-    if (currentHistoryIndex !== null && historicalTimelineCache[currentHistoryIndex]) {
+    if (currentHistoryIndex !== null) {
         buildHistoryTrailsForIndex(currentHistoryIndex);
-        const frame = historicalTimelineCache[currentHistoryIndex];
-        renderSimulationFrame(frame.bodies || [], true);
     }
 });
 
@@ -580,3 +662,35 @@ presetButtons.forEach(btn => {
         sendSpeed(val);
     });
 });
+
+// Mass slider
+massSlider.addEventListener('input', () => {
+    const logVal = Number(massSlider.value);
+    const mass = massFromLog(logVal);
+    massLabel.textContent = mass.toExponential(2);
+});
+
+clearPlacementBtn.addEventListener('click', () => {
+    placementBodies = [];
+    placementPos = null;
+})
+
+uploadSceneBtn.addEventListener('click', () => {
+    sendUploadScene();
+})
+
+function sendUploadScene(cb) {
+    const scene = { 
+        bodies: placementBodies
+    };
+    socket.send(JSON.stringify({
+        type: 'UPLOAD_SCENE',
+        scene
+    }));
+
+    if (cb) cb();
+}
+
+function sendControl(cmd) {
+    socket.send(JSON.stringify({ type: 'CONTROL', command: cmd}));
+}
