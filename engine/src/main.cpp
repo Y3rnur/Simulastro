@@ -5,14 +5,26 @@
 #include <thread>
 #include <atomic>
 #include <memory>
+#include <condition_variable>
 
 #include "../include/body.hpp"
 #include "simulation.pb.h"
 #include <grpcpp/grpcpp.h>
 #include "simulation.grpc.pb.h"
+#include "globals.hpp"
+#include "../include/simulation_service_impl.hpp"
+#include "../include/control_service_impl.hpp"
 
 const double G = 6.67430e-11;   // Gravitational Constant
 std::atomic<double> g_speed_multiplier{1.0};
+
+// Global threading primitives
+std::mutex universe_mutex;
+std::vector<Body> universe;
+std::atomic<bool> scene_loaded{false};
+std::atomic<bool> is_running{false};
+std::condition_variable state_cv;
+std::mutex state_mutex;
 
 // Structure to hold derivatives: change in position (dx, dy) and change in velocity (dvx, dvy)
 struct Derivative {
@@ -189,21 +201,8 @@ public:
 int main() {
     std::cout << "Astrophysics Engine initialized with RK4..." << std::endl;
 
-    // Example: Setting up a Binary system
-    std::vector<Body> universe;
-
-    // SIMULATION EXAMPLES/CONFIGURATIONS GO BELOW HERE:
-    double r0 = 3000.0;       // Initial distance
-        double M = 5e11;          // Central mass
-        double satellite_mass = 1e4;
-
-        // Direct head-on collision: Vx is negative, pointing straight to origin
-        double v_impact = -5.0;   // Moving fast straight toward the center star
-
-        universe.push_back(Body(1, M, 0.0, 0.0, 0.0, 0.0));
-        universe.push_back(Body(2, satellite_mass, r0, 0.0, v_impact, 0.0));
-
-        double dt = 2.0;          // A balanced 2-second step to watch the approach smoothly
+    scene_loaded.store(false);
+    is_running.store(false);
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
     std::unique_ptr<astrophysics::SimulationService::Stub> stub = astrophysics::SimulationService::NewStub(channel);
@@ -213,20 +212,21 @@ int main() {
 
     std::unique_ptr<grpc::ClientWriter<astrophysics::TelemetryFrame>> writer(stub->StreamTelemetry(&context, &response));
 
-    // Speed control service thread
-    std::thread speed_service_thread([](){
-        std::string server_address("0.0.0.0:50052");
-        SpeedServiceImpl service;
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort("0.0.0.0:50052", grpc::InsecureServerCredentials());
 
-        grpc::ServerBuilder builder;
-        builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-        builder.RegisterService(&service);
-        std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
-        std::cerr << "SpeedService listening on " << server_address << std::endl;
-        server->Wait();
-    });
-    speed_service_thread.detach();
+    SimulationServiceImpl sim_service;
+    SpeedServiceImpl speed_service;
+    ControlServiceImpl control_service;
 
+    builder.RegisterService(&sim_service);
+    builder.RegisterService(&speed_service);
+    builder.RegisterService(&control_service);
+
+    std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
+    std::cerr << "Engine control services are running on 50052..." << std::endl;
+
+    double dt = 1.0;
     int64_t frame = 0;
     double current_simulation_time = 0.0;
     double step_accumulator = 0.0;
@@ -234,44 +234,51 @@ int main() {
 
     // Simulating steps and capturing Protobuf telemetry
     while (true) {
-        double mult = g_speed_multiplier.load();
-        step_accumulator += mult;
+        // wait until scene is loaded
+        {
+            std::unique_lock<std::mutex> lock(state_mutex);
+            state_cv.wait(lock, []{ return scene_loaded.load(); });
+        }
 
-        int steps = static_cast<int>(std::floor(step_accumulator));
-        if (steps > MAX_SUBSTEPS) steps = MAX_SUBSTEPS;
+        if (!is_running.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            continue;
+        }
 
-        if (steps > 0) {
+        {
+            std::lock_guard<std::mutex> lock(universe_mutex);
+            double mult = g_speed_multiplier.load();
+            step_accumulator += mult;
+
+            int steps = static_cast<int>(std::floor(step_accumulator));
+            if (steps > MAX_SUBSTEPS) steps = MAX_SUBSTEPS;
+            
             for (int s = 0; s < steps; ++s) {
                 rk4_step(universe, dt);
                 resolve_collisions(universe);
                 current_simulation_time += dt;
             }
             step_accumulator -= steps;
-        } else {
-            // no advancement in this tick
         }
 
         astrophysics::TelemetryFrame telemetry_frame;
         telemetry_frame.set_frame_number(frame);
         telemetry_frame.set_timestamp(current_simulation_time);
 
-        for (const auto& body : universe) {
-            astrophysics::BodyState* state_msg = telemetry_frame.add_bodies();
-            state_msg->set_id(body.id);
-            state_msg->set_mass(body.mass);
-            state_msg->set_x(body.state.x);
-            state_msg->set_y(body.state.y);
-            state_msg->set_vx(body.state.vx);
-            state_msg->set_vy(body.state.vy);
-            state_msg->set_radius(body.radius);
-            state_msg->set_alive(body.alive);
+        {
+            std::lock_guard<std::mutex> lock(universe_mutex);
+            for (const auto& body : universe) {
+                astrophysics::BodyState* state_msg = telemetry_frame.add_bodies();
+                state_msg->set_id(body.id);
+                state_msg->set_mass(body.mass);
+                state_msg->set_x(body.state.x);
+                state_msg->set_y(body.state.y);
+                state_msg->set_vx(body.state.vx);
+                state_msg->set_vy(body.state.vy);
+                state_msg->set_radius(body.radius);
+                state_msg->set_alive(body.alive);
+            }
         }
-
-        /*  LOGGING FRAME RESULTS
-        std::cout << "Frame: " << frame << " -> Packed: "
-                    << telemetry_frame.bodies_size() << " bodies ("
-                    << telemetry_frame.ByteSizeLong() << " bytes). Sending..." << std::endl;
-        */
         
         // Sending the packed frame across the socket pipe
         if (!writer->Write(telemetry_frame)) {

@@ -109,7 +109,21 @@ func main() {
 	globalCache := cache.NewSimulationCache(maxHistorySlots)
 	fmt.Printf("Pre-allocated %d structural history frames in local system memory.\n", maxHistorySlots)
 
-	wsHub := websocket.NewHub()
+	engineConn, err := grpc.DialContext(
+		context.Background(),
+		"localhost:50052",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatalf("failed to connect to engine control: %v", err)
+	}
+	defer engineConn.Close()
+
+	sceneClient := pb.NewSimulationServiceClient(engineConn)
+	controlClient := pb.NewControlServiceClient(engineConn)
+	speedClient := pb.NewSpeedServiceClient(engineConn)
+
+	wsHub := websocket.NewHub(sceneClient, controlClient)
 	go wsHub.Run()
 
 	fs := http.FileServer(http.Dir("../../../web"))
@@ -144,21 +158,6 @@ func main() {
 
 	pb.RegisterSimulationServiceServer(grpcServer, simServer)
 
-	// address where the C++ engine exposes its speed control RPC
-	engineControlAddr := "localhost:50052"
-
-	engineControlConn, err := grpc.Dial(engineControlAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	var engineControlClient pb.SpeedServiceClient
-
-	if err != nil {
-		log.Printf("⚠️ could not connect to engine control at %s: %v", engineControlAddr, err)
-		engineControlClient = nil
-	} else {
-		engineControlClient = pb.NewSpeedServiceClient(engineControlConn)
-		log.Printf("✅ connected to engine control at %s", engineControlAddr)
-		defer engineControlConn.Close()
-	}
-
 	go func() {
 		for v := range wsHub.SpeedUpdates {
 			simServer.speedMutex.Lock()
@@ -166,18 +165,12 @@ func main() {
 			simServer.speedMutex.Unlock()
 			log.Printf("Updated server speedMultiplier -> %.3f", v)
 
-			if engineControlClient != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				_, err := engineControlClient.UpdateSpeed(ctx, &pb.SpeedRequest{Multiplier: v})
-				cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_, err := speedClient.UpdateSpeed(ctx, &pb.SpeedRequest{Multiplier: v})
+			cancel()
 
-				if err != nil {
-					log.Printf("❌ Forward to engine failed: %v", err)
-				} else {
-					log.Printf("✅ forwarded speed to engine control RPC")
-				}
-			} else {
-				log.Printf("⚠️ Cannot forward speed: engineControlClient connection is offline")
+			if err != nil {
+				log.Printf("❌ Forward speed failed: %v", err)
 			}
 		}
 	}()

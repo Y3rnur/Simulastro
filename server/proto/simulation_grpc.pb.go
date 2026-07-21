@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	SimulationService_StreamTelemetry_FullMethodName = "/astrophysics.SimulationService/StreamTelemetry"
+	SimulationService_UploadScene_FullMethodName     = "/astrophysics.SimulationService/UploadScene"
 )
 
 // SimulationServiceClient is the client API for SimulationService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SimulationServiceClient interface {
 	StreamTelemetry(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[TelemetryFrame, SimulationResponse], error)
+	UploadScene(ctx context.Context, in *UploadSceneRequest, opts ...grpc.CallOption) (*UploadSceneResponse, error)
 }
 
 type simulationServiceClient struct {
@@ -50,11 +52,22 @@ func (c *simulationServiceClient) StreamTelemetry(ctx context.Context, opts ...g
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SimulationService_StreamTelemetryClient = grpc.ClientStreamingClient[TelemetryFrame, SimulationResponse]
 
+func (c *simulationServiceClient) UploadScene(ctx context.Context, in *UploadSceneRequest, opts ...grpc.CallOption) (*UploadSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadSceneResponse)
+	err := c.cc.Invoke(ctx, SimulationService_UploadScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SimulationServiceServer is the server API for SimulationService service.
 // All implementations must embed UnimplementedSimulationServiceServer
 // for forward compatibility.
 type SimulationServiceServer interface {
 	StreamTelemetry(grpc.ClientStreamingServer[TelemetryFrame, SimulationResponse]) error
+	UploadScene(context.Context, *UploadSceneRequest) (*UploadSceneResponse, error)
 	mustEmbedUnimplementedSimulationServiceServer()
 }
 
@@ -67,6 +80,9 @@ type UnimplementedSimulationServiceServer struct{}
 
 func (UnimplementedSimulationServiceServer) StreamTelemetry(grpc.ClientStreamingServer[TelemetryFrame, SimulationResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamTelemetry not implemented")
+}
+func (UnimplementedSimulationServiceServer) UploadScene(context.Context, *UploadSceneRequest) (*UploadSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UploadScene not implemented")
 }
 func (UnimplementedSimulationServiceServer) mustEmbedUnimplementedSimulationServiceServer() {}
 func (UnimplementedSimulationServiceServer) testEmbeddedByValue()                           {}
@@ -96,13 +112,36 @@ func _SimulationService_StreamTelemetry_Handler(srv interface{}, stream grpc.Ser
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SimulationService_StreamTelemetryServer = grpc.ClientStreamingServer[TelemetryFrame, SimulationResponse]
 
+func _SimulationService_UploadScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SimulationServiceServer).UploadScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SimulationService_UploadScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SimulationServiceServer).UploadScene(ctx, req.(*UploadSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SimulationService_ServiceDesc is the grpc.ServiceDesc for SimulationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var SimulationService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "astrophysics.SimulationService",
 	HandlerType: (*SimulationServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UploadScene",
+			Handler:    _SimulationService_UploadScene_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "StreamTelemetry",
@@ -213,6 +252,108 @@ var SpeedService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateSpeed",
 			Handler:    _SpeedService_UpdateSpeed_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "simulation.proto",
+}
+
+const (
+	ControlService_Control_FullMethodName = "/astrophysics.ControlService/Control"
+)
+
+// ControlServiceClient is the client API for ControlService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ControlServiceClient interface {
+	Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error)
+}
+
+type controlServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewControlServiceClient(cc grpc.ClientConnInterface) ControlServiceClient {
+	return &controlServiceClient{cc}
+}
+
+func (c *controlServiceClient) Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ControlResponse)
+	err := c.cc.Invoke(ctx, ControlService_Control_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ControlServiceServer is the server API for ControlService service.
+// All implementations must embed UnimplementedControlServiceServer
+// for forward compatibility.
+type ControlServiceServer interface {
+	Control(context.Context, *ControlRequest) (*ControlResponse, error)
+	mustEmbedUnimplementedControlServiceServer()
+}
+
+// UnimplementedControlServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedControlServiceServer struct{}
+
+func (UnimplementedControlServiceServer) Control(context.Context, *ControlRequest) (*ControlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Control not implemented")
+}
+func (UnimplementedControlServiceServer) mustEmbedUnimplementedControlServiceServer() {}
+func (UnimplementedControlServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeControlServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ControlServiceServer will
+// result in compilation errors.
+type UnsafeControlServiceServer interface {
+	mustEmbedUnimplementedControlServiceServer()
+}
+
+func RegisterControlServiceServer(s grpc.ServiceRegistrar, srv ControlServiceServer) {
+	// If the following call panics, it indicates UnimplementedControlServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ControlService_ServiceDesc, srv)
+}
+
+func _ControlService_Control_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ControlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServiceServer).Control(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlService_Control_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServiceServer).Control(ctx, req.(*ControlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ControlService_ServiceDesc is the grpc.ServiceDesc for ControlService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ControlService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "astrophysics.ControlService",
+	HandlerType: (*ControlServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Control",
+			Handler:    _ControlService_Control_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

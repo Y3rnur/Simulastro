@@ -21,6 +21,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ControlRequest_Command int32
+
+const (
+	ControlRequest_PLAY  ControlRequest_Command = 0
+	ControlRequest_PAUSE ControlRequest_Command = 1
+)
+
+// Enum value maps for ControlRequest_Command.
+var (
+	ControlRequest_Command_name = map[int32]string{
+		0: "PLAY",
+		1: "PAUSE",
+	}
+	ControlRequest_Command_value = map[string]int32{
+		"PLAY":  0,
+		"PAUSE": 1,
+	}
+)
+
+func (x ControlRequest_Command) Enum() *ControlRequest_Command {
+	p := new(ControlRequest_Command)
+	*p = x
+	return p
+}
+
+func (x ControlRequest_Command) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ControlRequest_Command) Descriptor() protoreflect.EnumDescriptor {
+	return file_simulation_proto_enumTypes[0].Descriptor()
+}
+
+func (ControlRequest_Command) Type() protoreflect.EnumType {
+	return &file_simulation_proto_enumTypes[0]
+}
+
+func (x ControlRequest_Command) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ControlRequest_Command.Descriptor instead.
+func (ControlRequest_Command) EnumDescriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{7, 0}
+}
+
 // Data structure representing a single celestial body state
 type BodyState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -333,6 +379,200 @@ func (x *SpeedResponse) GetMessage() string {
 	return ""
 }
 
+// request by Go server for uploading a scene
+type UploadSceneRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bodies        []*BodyState           `protobuf:"bytes,1,rep,name=bodies,proto3" json:"bodies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadSceneRequest) Reset() {
+	*x = UploadSceneRequest{}
+	mi := &file_simulation_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadSceneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadSceneRequest) ProtoMessage() {}
+
+func (x *UploadSceneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadSceneRequest.ProtoReflect.Descriptor instead.
+func (*UploadSceneRequest) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UploadSceneRequest) GetBodies() []*BodyState {
+	if x != nil {
+		return x.Bodies
+	}
+	return nil
+}
+
+// response from C++ engine confirming scene was loaded
+type UploadSceneResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadSceneResponse) Reset() {
+	*x = UploadSceneResponse{}
+	mi := &file_simulation_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadSceneResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadSceneResponse) ProtoMessage() {}
+
+func (x *UploadSceneResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadSceneResponse.ProtoReflect.Descriptor instead.
+func (*UploadSceneResponse) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UploadSceneResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UploadSceneResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type ControlRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Command       ControlRequest_Command `protobuf:"varint,1,opt,name=command,proto3,enum=astrophysics.ControlRequest_Command" json:"command,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ControlRequest) Reset() {
+	*x = ControlRequest{}
+	mi := &file_simulation_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ControlRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ControlRequest) ProtoMessage() {}
+
+func (x *ControlRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ControlRequest.ProtoReflect.Descriptor instead.
+func (*ControlRequest) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ControlRequest) GetCommand() ControlRequest_Command {
+	if x != nil {
+		return x.Command
+	}
+	return ControlRequest_PLAY
+}
+
+type ControlResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ControlResponse) Reset() {
+	*x = ControlResponse{}
+	mi := &file_simulation_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ControlResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ControlResponse) ProtoMessage() {}
+
+func (x *ControlResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simulation_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ControlResponse.ProtoReflect.Descriptor instead.
+func (*ControlResponse) Descriptor() ([]byte, []int) {
+	return file_simulation_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ControlResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ControlResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_simulation_proto protoreflect.FileDescriptor
 
 const file_simulation_proto_rawDesc = "" +
@@ -361,11 +601,27 @@ const file_simulation_proto_rawDesc = "" +
 	"multiplier\"9\n" +
 	"\rSpeedResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2h\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"E\n" +
+	"\x12UploadSceneRequest\x12/\n" +
+	"\x06bodies\x18\x01 \x03(\v2\x17.astrophysics.BodyStateR\x06bodies\"I\n" +
+	"\x13UploadSceneResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"p\n" +
+	"\x0eControlRequest\x12>\n" +
+	"\acommand\x18\x01 \x01(\x0e2$.astrophysics.ControlRequest.CommandR\acommand\"\x1e\n" +
+	"\aCommand\x12\b\n" +
+	"\x04PLAY\x10\x00\x12\t\n" +
+	"\x05PAUSE\x10\x01\"E\n" +
+	"\x0fControlResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xbc\x01\n" +
 	"\x11SimulationService\x12S\n" +
-	"\x0fStreamTelemetry\x12\x1c.astrophysics.TelemetryFrame\x1a .astrophysics.SimulationResponse(\x012V\n" +
+	"\x0fStreamTelemetry\x12\x1c.astrophysics.TelemetryFrame\x1a .astrophysics.SimulationResponse(\x01\x12R\n" +
+	"\vUploadScene\x12 .astrophysics.UploadSceneRequest\x1a!.astrophysics.UploadSceneResponse2V\n" +
 	"\fSpeedService\x12F\n" +
-	"\vUpdateSpeed\x12\x1a.astrophysics.SpeedRequest\x1a\x1b.astrophysics.SpeedResponseB8Z6github.com/yernur/astrophysics_simulation/server/protob\x06proto3"
+	"\vUpdateSpeed\x12\x1a.astrophysics.SpeedRequest\x1a\x1b.astrophysics.SpeedResponse2X\n" +
+	"\x0eControlService\x12F\n" +
+	"\aControl\x12\x1c.astrophysics.ControlRequest\x1a\x1d.astrophysics.ControlResponseB8Z6github.com/yernur/astrophysics_simulation/server/protob\x06proto3"
 
 var (
 	file_simulation_proto_rawDescOnce sync.Once
@@ -379,25 +635,37 @@ func file_simulation_proto_rawDescGZIP() []byte {
 	return file_simulation_proto_rawDescData
 }
 
-var file_simulation_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_simulation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_simulation_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_simulation_proto_goTypes = []any{
-	(*BodyState)(nil),          // 0: astrophysics.BodyState
-	(*TelemetryFrame)(nil),     // 1: astrophysics.TelemetryFrame
-	(*SimulationResponse)(nil), // 2: astrophysics.SimulationResponse
-	(*SpeedRequest)(nil),       // 3: astrophysics.SpeedRequest
-	(*SpeedResponse)(nil),      // 4: astrophysics.SpeedResponse
+	(ControlRequest_Command)(0), // 0: astrophysics.ControlRequest.Command
+	(*BodyState)(nil),           // 1: astrophysics.BodyState
+	(*TelemetryFrame)(nil),      // 2: astrophysics.TelemetryFrame
+	(*SimulationResponse)(nil),  // 3: astrophysics.SimulationResponse
+	(*SpeedRequest)(nil),        // 4: astrophysics.SpeedRequest
+	(*SpeedResponse)(nil),       // 5: astrophysics.SpeedResponse
+	(*UploadSceneRequest)(nil),  // 6: astrophysics.UploadSceneRequest
+	(*UploadSceneResponse)(nil), // 7: astrophysics.UploadSceneResponse
+	(*ControlRequest)(nil),      // 8: astrophysics.ControlRequest
+	(*ControlResponse)(nil),     // 9: astrophysics.ControlResponse
 }
 var file_simulation_proto_depIdxs = []int32{
-	0, // 0: astrophysics.TelemetryFrame.bodies:type_name -> astrophysics.BodyState
-	1, // 1: astrophysics.SimulationService.StreamTelemetry:input_type -> astrophysics.TelemetryFrame
-	3, // 2: astrophysics.SpeedService.UpdateSpeed:input_type -> astrophysics.SpeedRequest
-	2, // 3: astrophysics.SimulationService.StreamTelemetry:output_type -> astrophysics.SimulationResponse
-	4, // 4: astrophysics.SpeedService.UpdateSpeed:output_type -> astrophysics.SpeedResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 0: astrophysics.TelemetryFrame.bodies:type_name -> astrophysics.BodyState
+	1, // 1: astrophysics.UploadSceneRequest.bodies:type_name -> astrophysics.BodyState
+	0, // 2: astrophysics.ControlRequest.command:type_name -> astrophysics.ControlRequest.Command
+	2, // 3: astrophysics.SimulationService.StreamTelemetry:input_type -> astrophysics.TelemetryFrame
+	6, // 4: astrophysics.SimulationService.UploadScene:input_type -> astrophysics.UploadSceneRequest
+	4, // 5: astrophysics.SpeedService.UpdateSpeed:input_type -> astrophysics.SpeedRequest
+	8, // 6: astrophysics.ControlService.Control:input_type -> astrophysics.ControlRequest
+	3, // 7: astrophysics.SimulationService.StreamTelemetry:output_type -> astrophysics.SimulationResponse
+	7, // 8: astrophysics.SimulationService.UploadScene:output_type -> astrophysics.UploadSceneResponse
+	5, // 9: astrophysics.SpeedService.UpdateSpeed:output_type -> astrophysics.SpeedResponse
+	9, // 10: astrophysics.ControlService.Control:output_type -> astrophysics.ControlResponse
+	7, // [7:11] is the sub-list for method output_type
+	3, // [3:7] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_simulation_proto_init() }
@@ -410,13 +678,14 @@ func file_simulation_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simulation_proto_rawDesc), len(file_simulation_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   5,
+			NumEnums:      1,
+			NumMessages:   9,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_simulation_proto_goTypes,
 		DependencyIndexes: file_simulation_proto_depIdxs,
+		EnumInfos:         file_simulation_proto_enumTypes,
 		MessageInfos:      file_simulation_proto_msgTypes,
 	}.Build()
 	File_simulation_proto = out.File

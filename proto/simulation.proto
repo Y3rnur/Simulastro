@@ -6,6 +6,7 @@ option go_package = "github.com/yernur/astrophysics_simulation/server/proto";
 
 service SimulationService {
   rpc StreamTelemetry(stream TelemetryFrame) returns (SimulationResponse);
+  rpc UploadScene(UploadSceneRequest) returns (UploadSceneResponse);
 }
 
 // Data structure representing a single celestial body state
@@ -46,4 +47,32 @@ message SpeedResponse {
 // control service by the engine to accept speed updates
 service SpeedService {
   rpc UpdateSpeed(SpeedRequest) returns (SpeedResponse);
+}
+
+// request by Go server for uploading a scene
+message UploadSceneRequest {
+  repeated BodyState bodies = 1;
+}
+
+// response from C++ engine confirming scene was loaded
+message UploadSceneResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ControlRequest {
+  enum Command {
+    PLAY = 0;
+    PAUSE = 1;
+  }
+  Command command = 1;
+}
+
+message ControlResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+service ControlService {
+  rpc Control(ControlRequest) returns (ControlResponse);
 }

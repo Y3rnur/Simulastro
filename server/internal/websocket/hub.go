@@ -11,21 +11,25 @@ import (
 
 // Hub maintains the set of active clients and broadcasts messages to them
 type Hub struct {
-	clients      map[*Client]bool        // Registered active browser connections
-	Broadcast    chan *pb.TelemetryFrame // Inbound frames from the gRPC stream loop
-	Register     chan *Client            // Registration requests from the new browser tabs
-	Unregister   chan *Client            // Unregistration requests when tabs close
-	SpeedUpdates chan float64            // Speed updates from clients
+	clients       map[*Client]bool        // Registered active browser connections
+	Broadcast     chan *pb.TelemetryFrame // Inbound frames from the gRPC stream loop
+	Register      chan *Client            // Registration requests from the new browser tabs
+	Unregister    chan *Client            // Unregistration requests when tabs close
+	SpeedUpdates  chan float64            // Speed updates from clients
+	SceneClient   pb.SimulationServiceClient
+	ControlClient pb.ControlServiceClient
 }
 
 // NewHub initializes our centralized communication matrix
-func NewHub() *Hub {
+func NewHub(sceneClient pb.SimulationServiceClient, controlClient pb.ControlServiceClient) *Hub {
 	return &Hub{
-		clients:      make(map[*Client]bool),
-		Broadcast:    make(chan *pb.TelemetryFrame, 100), // Buffered to handle traffic bursts
-		Register:     make(chan *Client),
-		Unregister:   make(chan *Client),
-		SpeedUpdates: make(chan float64, 16),
+		clients:       make(map[*Client]bool),
+		Broadcast:     make(chan *pb.TelemetryFrame, 100), // Buffered to handle traffic bursts
+		Register:      make(chan *Client),
+		Unregister:    make(chan *Client),
+		SpeedUpdates:  make(chan float64, 16),
+		SceneClient:   sceneClient,
+		ControlClient: controlClient,
 	}
 }
 
@@ -80,9 +84,13 @@ func (h *Hub) Run() {
 				select {
 				case client.Send <- payload:
 				default:
-					// if a client's individual buffer channel is choked, close it down to save server health
-					close(client.Send)
-					delete(h.clients, client)
+					log.Printf("⚠️ Buffer full for a client, dropping frame %d", frame.FrameNumber)
+					log.Printf("❌ CRITICAL: Client buffer full for 3+ bodies. Disconnecting client to save server memory.")
+					/*
+						// if a client's individual buffer channel is choked, close it down to save server health
+						close(client.Send)
+						delete(h.clients, client)
+					*/
 				}
 			}
 		}

@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
+	pb "github.com/yernur/astrophysics_simulation/server/proto"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -16,7 +18,7 @@ const (
 	writeWait      = 10 * time.Second    // Time allowed to write a message to the peer.
 	pongWait       = 60 * time.Second    // Time allowed to read the next pong message from the peer.
 	pingPeriod     = (pongWait * 9) / 10 // Send pings to peer with this period. Must be less than pongWait.
-	maxMessageSize = 512                 // Maximum message size allowed from peer.
+	maxMessageSize = 8192                // Maximum message size allowed from peer.
 )
 
 var upgrader = websocket.Upgrader{
@@ -37,8 +39,176 @@ type Client struct {
 
 // Small struct to parse the control payload
 type WSMessage struct {
-	Type       string  `json:"type"`
-	Multiplier float64 `json:"multiplier"` // For SET_SPEED
+	Type       string      `json:"type"`
+	Command    string      `json:"command,omitempty"`
+	Multiplier float64     `json:"multiplier,omitempty"`
+	Scene      *SceneDraft `json:"scene,omitempty"`
+}
+
+type SceneDraft struct {
+	Bodies []DraftBody `json:"bodies"`
+}
+
+type DraftBody struct {
+	ID     int     `json:"id"`
+	Mass   float64 `json:"mass"`
+	Radius float64 `json:"radius"`
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Vx     float64 `json:"vx"`
+	Vy     float64 `json:"vy"`
+	Alive  bool    `json:"alive"`
+}
+
+func (c *Client) SendError(msg string) {
+	errEnvelope := map[string]string{
+		"type":  "ERROR",
+		"error": msg,
+	}
+	bytes, _ := json.Marshal(errEnvelope)
+
+	// non-blocking send
+	select {
+	case c.Send <- bytes:
+	default:
+		log.Println("⚠️ Could not send error: channel full")
+	}
+}
+
+func handleControl(c *Client, cmd string) {
+	switch cmd {
+	case "PAUSE":
+		c.isPaused = true
+		if c.Hub.ControlClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			_, err := c.Hub.ControlClient.Control(ctx, &pb.ControlRequest{
+				Command: pb.ControlRequest_PAUSE,
+			})
+			if err != nil {
+				c.SendError("Engine pause failed")
+				return
+			}
+		}
+		log.Println("⏸️ System Paused")
+	case "PLAY":
+		c.isPaused = false
+		if c.Hub.ControlClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			_, err := c.Hub.ControlClient.Control(ctx, &pb.ControlRequest{
+				Command: pb.ControlRequest_PLAY,
+			})
+			if err != nil {
+				c.SendError("Engine play failed")
+				return
+			}
+		}
+		log.Println("▶️ System Playing")
+
+	default:
+		c.SendError("Invalid control command: " + cmd)
+	}
+}
+
+func handleSceneUpload(c *Client, scene *SceneDraft) {
+	if scene == nil || len(scene.Bodies) == 0 {
+		c.SendError("Empty scene received")
+		return
+	}
+
+	pbBodies := make([]*pb.BodyState, len(scene.Bodies))
+	for i, b := range scene.Bodies {
+		pbBodies[i] = &pb.BodyState{
+			Id:     int32(b.ID),
+			Mass:   b.Mass,
+			Radius: b.Radius,
+			X:      b.X,
+			Y:      b.Y,
+			Vx:     b.Vx,
+			Vy:     b.Vy,
+			Alive:  b.Alive,
+		}
+	}
+
+	req := &pb.UploadSceneRequest{Bodies: pbBodies}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	resp, err := c.Hub.SceneClient.UploadScene(ctx, req)
+
+	if err != nil {
+		log.Printf("❌ Failed to send scene to C++ engine: %v", err)
+		c.SendError("Engine communication failed")
+		return
+	}
+
+	if !resp.Success {
+		c.SendError("Engine rejected scene: " + resp.Message)
+		return
+	}
+
+	log.Printf("✅ Scene successfully forwarded to C++ engine: %s", resp.Message)
+}
+
+func handleFetchHistory(c *Client) {
+	if !c.isPaused {
+		c.SendError("Must be PAUSED to fetch history")
+		return
+	}
+	log.Println("🕒 Time-Travel Scrubber activated! Fetching historical RAM cache buffer...")
+	historyFrames := c.simCache.GetHistory()
+	log.Printf("📺 Preparing %d cached frames to send to frontend slider memory", len(historyFrames))
+
+	// Convert each protobuf frame to a JSON-friendly object via protojson
+	converted := make([]interface{}, 0, len(historyFrames))
+	for _, f := range historyFrames {
+		// ensure nil-safety
+		if f == nil {
+			continue
+		}
+		b, err := protojson.Marshal(f)
+		if err != nil {
+			log.Printf("⚠️ Failed to protojson-encode history frame: %v", err)
+			continue
+		}
+		var obj interface{}
+		if err := json.Unmarshal(b, &obj); err != nil {
+			log.Printf("⚠️ Failed to convert protojson bytes into object: %v", err)
+			continue
+		}
+		converted = append(converted, obj)
+	}
+
+	historyEnvelope := struct {
+		Type   string        `json:"type"`
+		Frames []interface{} `json:"frames"`
+	}{
+		Type:   "HISTORY",
+		Frames: converted,
+	}
+
+	jsonBytes, err := json.Marshal(historyEnvelope)
+	if err != nil {
+		log.Printf("❌ Error marshaling history memory buffer: %v", err)
+	}
+
+	c.Send <- jsonBytes // push the marshaled payload into client's write channel
+}
+
+func handleSpeed(c *Client, multiplier float64) {
+	log.Printf("💨 SET_SPEED command processed. Multiplier: %.3fx", multiplier)
+
+	// non-blocking send to hub channel
+	select {
+	case c.Hub.SpeedUpdates <- multiplier:
+		log.Printf("enqueued speed update %.3f", multiplier)
+	default:
+		log.Printf("⚠️ speed update dropped (hub busy): %.3f", multiplier)
+	}
 }
 
 // ReadPump loops constantly to catch incoming command strings from the HTML5 control buttons
@@ -57,84 +227,34 @@ func (c *Client) ReadPump() {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("❌ ReadPump connection error: %v", err)
+			} else {
+				log.Printf("ℹ️ ReadPump connection closed (Expected): %v", err)
 			}
 			break
 		}
 
 		var msg WSMessage
-		var command string
 
 		// Handle user interactive command payloads from canvas dashboard UI
-		if err := json.Unmarshal(message, &msg); err == nil && msg.Type != "" {
-			command = msg.Type
-		} else {
-			command = string(message)
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("⚠️ Received non-JSON or malformed packet: %v", err)
+			c.SendError("Invalid message format")
+			continue
 		}
 
-		log.Printf("🎛️ Command received from client interface: %s", command)
-
-		switch command {
-		case "PAUSE":
-			c.isPaused = true
-			log.Println("⏸️ UI initiated Pause State. Holding live stream frames.")
-		case "PLAY":
-			c.isPaused = false
-			log.Println("▶️ UI initiated Play State. Resuming live frame rendering coordinates.")
+		switch msg.Type {
+		case "CONTROL":
+			handleControl(c, msg.Command)
+		case "UPLOAD_SCENE":
+			log.Printf("Trying to hit the UPLOAD_SCENE (debugging)...")
+			handleSceneUpload(c, msg.Scene)
 		case "FETCH_HISTORY":
-			if !c.isPaused {
-				log.Println("⚠️ FETCH_HISTORY ignored: client must be in PAUSE state before requesting history")
-				continue
-			}
-
-			log.Println("🕒 Time-Travel Scrubber activated! Fetching historical RAM cache buffer...")
-			historyFrames := c.simCache.GetHistory()
-			log.Printf("📺 Preparing %d cached frames to send to frontend slider memory", len(historyFrames))
-
-			// Convert each protobuf frame to a JSON-friendly object via protojson
-			converted := make([]interface{}, 0, len(historyFrames))
-			for _, f := range historyFrames {
-				// ensure nil-safety
-				if f == nil {
-					continue
-				}
-				b, err := protojson.Marshal(f)
-				if err != nil {
-					log.Printf("⚠️ Failed to protojson-encode history frame: %v", err)
-					continue
-				}
-				var obj interface{}
-				if err := json.Unmarshal(b, &obj); err != nil {
-					log.Printf("⚠️ Failed to convert protojson bytes into object: %v", err)
-					continue
-				}
-				converted = append(converted, obj)
-			}
-
-			historyEnvelope := struct {
-				Type   string        `json:"type"`
-				Frames []interface{} `json:"frames"`
-			}{
-				Type:   "HISTORY",
-				Frames: converted,
-			}
-
-			jsonBytes, err := json.Marshal(historyEnvelope)
-			if err != nil {
-				log.Printf("❌ Error marshaling history memory buffer: %v", err)
-				continue
-			}
-
-			c.Send <- jsonBytes // push the marshaled payload into client's write channel
+			handleFetchHistory(c)
 		case "SET_SPEED":
-			log.Printf("💨 SET_SPEED command processed. Multiplier: %.3fx", msg.Multiplier)
-
-			// non-blocking send to hub channel
-			select {
-			case c.Hub.SpeedUpdates <- msg.Multiplier:
-				log.Printf("enqueued speed update %.3f", msg.Multiplier)
-			default:
-				log.Printf("⚠️ speed update dropped (hub busy): %.3f", msg.Multiplier)
-			}
+			handleSpeed(c, msg.Multiplier)
+		default:
+			log.Printf("⚠️ Unknown message type: %s", msg.Type)
+			c.SendError("Unknown command type")
 		}
 	}
 }
@@ -190,7 +310,7 @@ func ServeWs(hub *Hub, simCache *cache.SimulationCache, w http.ResponseWriter, r
 		return
 	}
 
-	client := &Client{Hub: hub, Conn: conn, Send: make(chan []byte, 256), simCache: simCache, isPaused: false}
+	client := &Client{Hub: hub, Conn: conn, Send: make(chan []byte, 1024), simCache: simCache, isPaused: false}
 	client.Hub.Register <- client
 
 	// Launch individual client execution run routines onto independent lightweight concurrent spaces
