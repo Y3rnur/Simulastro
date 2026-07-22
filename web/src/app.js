@@ -378,11 +378,36 @@ function drawExplosions(ctx) {
     ctx.restore();
 }
 
+let previousLiveBodiesMap = new Map();
+
 // Data intake
 socket.onmessage = (event) => {
     const packet = JSON.parse(event.data);
 
     if (packet.type === 'LIVE') {
+        const payloadBodies = packet.payload.bodies || [];
+
+        for (const raw of payloadBodies) {
+            const body = normalizeBody(raw);
+            const prev = previousLiveBodiesMap.get(body.id);
+
+            if (prev && prev.alive && !body.alive) {
+                // trigger particle explosion when previously alive body become dead
+                triggerExplosionFromBody(body);
+
+                deathFades.set(body.id, {
+                    alpha: 1.0,
+                    remainingMs: typeof EXPLOSION_FADE_DURATION_MS !== 'undefined' ? EXPLOSION_FADE_DURATION_MS : 1500
+                });
+            }
+        }
+
+        previousLiveBodiesMap.clear();
+        for (const raw of payloadBodies) {
+            const body = normalizeBody(raw);
+            previousLiveBodiesMap.set(body.id, body);
+        }
+
         currentLiveFrame = packet.payload;
         currentHistoryFrame = null;
         updateTrails(packet.payload);
@@ -397,6 +422,7 @@ socket.onmessage = (event) => {
         historicalTimelineCache = packet.frames || [];
         currentHistoryFrame = historicalTimelineCache[historicalTimelineCache.length - 1] || null;
         currentLiveFrame = null;
+        previousLiveBodiesMap.clear();
         return;
     }
 };
@@ -552,7 +578,7 @@ function renderBodiesFromFrame(frameBodies, isHistory = false) {
         let bodyAlpha = 1.0;
         if (!isHistory && !body.alive) {
             const df = deathFades.get(body.id);
-            bodyAlpha = df ? df.alpha : 0.35;
+            bodyAlpha = df ? df.alpha : 0;
         }
         if (bodyAlpha <= 0) continue;
 
@@ -608,11 +634,22 @@ function sendSpeed(mult) {
 
 // UI Button actions
 playBtn.onclick = () => {
+    exploded.clear();
+    explosions.clear();
+    deathFades.clear();
+    previousLiveBodiesMap.clear();
+
     // upload placement bodies
     if (placementBodies.length > 0) {
-        sendUploadScene(() => sendControl('PLAY'));
+        sendUploadScene(() => {
+            sendControl('PLAY');
+            if (placementToggle) placementToggle.checked = false;
+            placementMode = false;
+        });
     } else {
         sendControl('PLAY');
+        if (placementToggle) placementToggle.checked = false;
+        placementMode = false;
     }
 
     // Lock the timeline slider while simulation is playing forward live
@@ -626,12 +663,21 @@ playBtn.onclick = () => {
 pauseBtn.onclick = () => {
     sendControl('PAUSE');
     historyBtn.disabled = false;
+    if (placementToggle) {
+        placementToggle.checked = true;
+    }
+    placementMode = true;
+    
     console.log("📤 Sent Command: PAUSE")
 };
 
 historyBtn.onclick = () => {
     socket.send(JSON.stringify({ type: 'FETCH_HISTORY' }));
     console.log("📤 Sent Command: FETCH_HISTORY");
+};
+
+placementToggle.onchange = (e) => {
+    placementMode = e.target.checked;
 };
 
 // Add a simple window event listener or bind to an input slider to zoom on the fly
