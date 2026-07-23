@@ -32,18 +32,21 @@
 
                 <div class="placement-panel" style="margin-top:12px; background:#071024; padding:10px; border-radius:8px; border:1px solid #1e293b;">
                     <label><input id="placementToggle" type="checkbox" checked> Placement Mode</label>
-                    <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                        <label style="min-width:60px; font-size:0.9rem;">Mass (log10):</label>
-                        <input id="massSlider" type="range" min="-3" max="12" step="0.1" value="6" style="flex:1;">
-                        <span id="massLabel" style="width:70px; text-align:right; font-family:monospace;">1e6</span>
+
+                    <div id="placementControls" style="margin-top:8px;">
+                        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                            <label style="min-width:60px; font-size:0.9rem;">Mass (log10):</label>
+                            <input id="massSlider" type="range" min="-3" max="12" step="0.1" value="6" style="flex:1;">
+                            <span id="massLabel" style="width:70px; text-align:right; font-family:monospace;">1e6</span>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                            <label style="min-width:60px; font-size:0.9rem;">Vel scale:</label>
+                            <input id="velocityScale" type="number" value="0.01" step="0.005" style="width:80px;">
+                            <button id="clearPlacementBtn" class="btn">Clear</button>
+                            <button id="uploadSceneBtn" class="btn btn-primary">Upload Scene</button>
+                        </div>
+                        <div style="margin-top:8px; font-size:0.85rem; color:#94a3b8;">Click once to place, click again to set velocity.</div>
                     </div>
-                    <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                        <label style="min-width:60px; font-size:0.9rem;">Vel scale:</label>
-                        <input id="velocityScale" type="number" value="0.01" step="0.005" style="width:80px;">
-                        <button id="clearPlacementBtn" class="btn">Clear</button>
-                        <button id="uploadSceneBtn" class="btn btn-primary">Upload Scene</button>
-                    </div>
-                    <div style="margin-top:8px; font-size:0.85rem; color:#94a3b8;">Click once to place, click again to set velocity.</div>
                 </div>
             </div>
         </main>

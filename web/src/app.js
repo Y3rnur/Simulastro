@@ -86,6 +86,7 @@ let placementHoverPos = null;
 const DENSITY = 2000.0;         // matching with engine's density value
 
 // Placement modal bindings
+const placementControls = document.getElementById('placementControls');
 const placementToggle = document.getElementById('placementToggle');
 const massSlider = document.getElementById('massSlider');
 const massLabel = document.getElementById('massLabel');
@@ -162,6 +163,20 @@ canvas.addEventListener('pointerleave', () => {
 });
 
 canvas.addEventListener('pointerdown', (ev) => {
+    if (currentHistoryFrame) {
+        currentHistoryFrame = null;
+        currentHistoryIndex = null;
+        trails.clear();
+        timeSlider.disabled = true;
+        timeSlider.style.cursor = "not-allowed";
+
+        placementMode = true;
+        if (placementToggle) placementToggle.checked = true;
+        if (placementControls) placementControls.style.display = 'block';
+
+        console.log("🔄 Exited history mode via canvas click.");
+    }
+
     if (!placementToggle.checked) return;   // only works in placement mode
 
     const rect = canvas.getBoundingClientRect();
@@ -420,8 +435,33 @@ socket.onmessage = (event) => {
 
     if (packet.type === 'HISTORY') {
         historicalTimelineCache = packet.frames || [];
-        currentHistoryFrame = historicalTimelineCache[historicalTimelineCache.length - 1] || null;
-        currentLiveFrame = null;
+
+        placementMode = false;
+        if (placementToggle) placementToggle.checked = false;
+        if (placementControls) placementControls.style.display = 'none';
+
+        if (historicalTimelineCache.length > 0) {
+            timeSlider.min = 0;
+            timeSlider.max = historicalTimelineCache.length - 1;
+
+            const lastIndex = historicalTimelineCache.length - 1;
+            timeSlider.value = lastIndex;
+            timeSlider.disabled = false;
+            timeSlider.style.cursor = "pointer";
+
+            currentHistoryIndex = lastIndex;
+            currentHistoryFrame = historicalTimelineCache[lastIndex];
+            currentLiveFrame = null;
+
+            updateSliderLabel(lastIndex, historicalTimelineCache.length);
+
+            if (currentHistoryFrame) {
+                frameEl.textContent = currentHistoryFrame.frameNumber || 0;
+                timeEl.textContent = (currentHistoryFrame.timestamp || 0).toFixed(3);
+                bodiesEl.textContent = currentHistoryFrame.bodies ? currentHistoryFrame.bodies.length : 0;
+            }
+        }
+        
         previousLiveBodiesMap.clear();
         return;
     }
@@ -513,7 +553,7 @@ function renderSceneBase() {
 }
 
 function drawPlacementOverlay() {
-    if (!placementMode) return;
+    if (!placementMode || currentHistoryFrame) return;
 
     // draw placed bodies
     for (const body of placementBodies) {
@@ -676,9 +716,25 @@ historyBtn.onclick = () => {
     console.log("📤 Sent Command: FETCH_HISTORY");
 };
 
-placementToggle.onchange = (e) => {
-    placementMode = e.target.checked;
-};
+if (placementControls && placementToggle) {
+    placementControls.style.display = placementToggle.checked ? 'block' : 'none';
+
+    placementToggle.onchange = (e) => {
+        placementMode = e.target.checked;
+        placementControls.style.display = placementMode ? 'block' : 'none';
+
+        if (placementMode && currentHistoryFrame) {
+            currentHistoryFrame = null;
+            currentHistoryIndex = null;
+            trails.clear();
+            timeSlider.disabled = true;
+            timeSlider.style.cursor = "not-allowed";
+            console.log("🛠️ Exited history mode via Placement Mode checkbox.");
+        }
+    };
+} else {
+    console.warn("⚠️ Warning: placementControls or placementToggle element not found in DOM yet!")
+}
 
 // Add a simple window event listener or bind to an input slider to zoom on the fly
 window.addEventListener('wheel', (e) => {
