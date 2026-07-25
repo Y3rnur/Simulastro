@@ -94,6 +94,19 @@ const velocityScaleInput = document.getElementById('velocityScale');
 const uploadSceneBtn = document.getElementById('uploadSceneBtn');
 const clearPlacementBtn = document.getElementById('clearPlacementBtn');
 
+// Mouse hover/click on bodies logic
+let hoveredBodyId = null;       // ID of body currently under the mouse
+let pinnedBodyId = null;          // ID of body currently pinned via click
+
+// Body inspector bindings
+const inspectorCard = document.getElementById('bodyInspectorCard');
+const inspId = document.getElementById('inspId');
+const inspMass = document.getElementById('inspMass');
+const inspRadius = document.getElementById('inspRadius');
+const inspPos = document.getElementById('inspPos');
+const inspSpeed = document.getElementById('inspSpeed');
+const inspectorPinStatus = document.getElementById('inspectorPinStatus');
+
 socket.onopen = () => {
     statusEl.textContent = 'Connected';
     statusEl.className = 'connected';
@@ -148,14 +161,62 @@ function radiusFromMass(mass) {
     return Math.cbrt(Math.max(volume, 0));
 }
 
-canvas.addEventListener('pointermove', (ev) => {
-    if (!placementMode || !placementPos) return;
+function updateInspectorCard(body, isPinned, clientX, clientY) {
+    if (!body) {
+        if (!pinnedBodyId) {
+            inspectorCard.style.display = 'none';
+        }
+        return;
+    }
 
+    inspId.textContent = body.id + (!body.alive ? ' (DEAD)' : '');
+    inspMass.textContent = body.mass.toExponential(2);
+    inspRadius.textContent = body.radius.toFixed(1);
+    inspPos.textContent = `${body.x.toFixed(1)}, ${body.y.toFixed(1)}`;
+
+    const speed = Math.sqrt((body.vx || 0) ** 2 + (body.vy || 0) ** 2);
+    inspSpeed.textContent = speed.toFixed(2);
+
+    inspectorPinStatus.textContent = isPinned ? 'PINNED (CLICK TO UNPIN)' : 'HOVERING';
+    inspectorPinStatus.style.color = isPinned ? '#22c55e' : '#f59e0b';
+    inspectorPinStatus.style.background = isPinned ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+
+    inspectorCard.style.display = 'block';
+
+    const screenPos = worldToScreen(body.x, body.y);
+
+    if (isPinned) {
+        // position pinned card near target body
+        inspectorCard.style.left = `${screenPos.x + 15}px`;
+        inspectorCard.style.top = `${screenPos.y + 15}px`;
+    } else {
+        // position pinned card near mouse cursor
+        inspectorCard.style.left = `${clientX + 15}px`;
+        inspectorCard.style.top = `${clientY + 15}px`;
+    }
+}
+
+canvas.addEventListener('pointermove', (ev) => {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left;
     const sy = ev.clientY - rect.top;
 
-    placementHoverPos = screenToWorld(sx, sy);
+    // Handle placement hover line if in placement mode & drawing vector
+    if (placementMode && placementPos) {
+        placementHoverPos = screenToWorld(sx, sy);
+    }
+
+    // Handle body inspection hover (only if not pinned to a body)
+    if (!pinnedBodyId) {
+        const hoveredBody = findBodyAtScreenCord(sx, sy);
+        if (hoveredBody) {
+            hoveredBodyId = hoveredBody.id;
+            updateInspectorCard(hoveredBody, false, ev.clientX, ev.clientY);
+        } else {
+            hoveredBodyId = null;
+            inspectorCard.style.display = 'none';
+        }
+    }
 });
 
 canvas.addEventListener('pointerleave', () => {
@@ -163,6 +224,28 @@ canvas.addEventListener('pointerleave', () => {
 });
 
 canvas.addEventListener('pointerdown', (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left;
+    const sy = ev.clientY - rect.top;
+
+    const clickedBody = findBodyAtScreenCord(sx, sy);
+    if (clickedBody) {
+        if (pinnedBodyId === clickedBody.id) {
+            // unpin if clicking the same body again
+            pinnedBodyId = null;
+            inspectorCard.style.display = 'none';
+        } else {
+            // pin to this body
+            pinnedBodyId = clickedBody.id;
+            updateInspectorCard(clickedBody, true, ev.clientX, ev.clientY);
+        }
+        return;
+    } else if (pinnedBodyId) {
+        // clicked empty space while pinned -> unpin
+        pinnedBodyId = null;
+        inspectorCard.style.display = 'none';
+    }
+    
     if (currentHistoryFrame) {
         currentHistoryFrame = null;
         currentHistoryIndex = null;
@@ -177,11 +260,8 @@ canvas.addEventListener('pointerdown', (ev) => {
         console.log("🔄 Exited history mode via canvas click.");
     }
 
-    if (!placementToggle.checked) return;   // only works in placement mode
+    if (!placementToggle.checked) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const sx = ev.clientX - rect.left;
-    const sy = ev.clientY - rect.top;
     const world = screenToWorld(sx, sy);
 
     if (!placementPos) {
@@ -213,6 +293,42 @@ canvas.addEventListener('pointerdown', (ev) => {
     placementPos = null;
     placementHoverPos = null;
 });
+
+function findBodyAtScreenCord(sx, sy) {
+    let candidateBodies = [];
+
+    if (currentHistoryFrame && currentHistoryFrame.bodies) {
+        candidateBodies = currentHistoryFrame.bodies.map(normalizeBody);
+    } else if (!placementMode && currentLiveFrame && currentLiveFrame.bodies) {
+        candidateBodies = currentLiveFrame.bodies.map(normalizeBody);
+    } else if (placementMode && placementBodies.length > 0) {
+        candidateBodies = placementBodies;
+    } else if (currentLiveFrame && currentLiveFrame.bodies) {
+        // fallback to live bodies if available
+        candidateBodies = currentLiveFrame.bodies.map(normalizeBody);
+    }
+
+    for (const rawBody of candidateBodies) {
+        const body = normalizeBody(rawBody);
+
+        // ignore dead bodies
+        if (!body.alive) continue;
+
+        const screenPos = worldToScreen(body.x, body.y);
+        const radiusPx = Math.max(6, body.radius * ZOOM_SCALE);
+
+        const dx = sx - screenPos.x;
+        const dy = sy - screenPos.y;
+        const distSq = dx * dx + dy * dy;
+
+        // Check if mouse is within body radius (also a padding for ease of click)
+        const hitRadius = Math.max(radiusPx, 10);
+        if (distSq <= hitRadius * hitRadius) {
+            return body;
+        }
+    }
+    return null;
+}
 
 function updateTrails(frame) {
     if (!frame || !frame.bodies) return;
@@ -662,6 +778,27 @@ function renderLoop(now) {
     }
 
     drawPlacementOverlay();
+
+    // pinned inspector card telemetry tick
+    if (pinnedBodyId) {
+        let pinnedBody = null;
+
+        const candidateBodies = (currentLiveFrame && currentLiveFrame.bodies) 
+            ? currentLiveFrame.bodies.map(normalizeBody) 
+            : placementBodies;
+
+        const found = candidateBodies.find(b => b.id === pinnedBodyId);
+        if (found && found.alive) {
+            pinnedBody = found;
+            // update the card with fresh stats and re-anchor its position to the moving body
+            updateInspectorCard(pinnedBody, true, 0, 0);
+        } else {
+            // if pinned body exploded or disappeared, auto-unpin the card
+            pinnedBodyId = null;
+            inspectorCard.style.display = 'none';
+        }
+    }
+
     requestAnimationFrame(renderLoop);
 }
 

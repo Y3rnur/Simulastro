@@ -11,6 +11,20 @@
         <main class="viewport-container">
             <canvas id="simCanvas"></canvas>
 
+            <div id="bodyInspectorCard" style="display: none; position: absolute; background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 8px; padding: 12px; color: #f8fafc; font-family: monospace; font-size: 12px; pointer-events: none; z-index: 100; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 6px;">
+                    <span id="inspectorTitle" style="font-weight: bold; color: #38bdf8;">🔭 Body Inspector</span>
+                    <span id="inspectorPinStatus" style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 2px 4px; border-radius: 4px;">HOVERING</span>
+                </div>
+                <div id="inspectorContent">
+                    <div>ID: <span id="inspId">-</span></div>
+                    <div>Mass: <span id="inspMass">-</span></div>
+                    <div>Radius: <span id="inspRadius">-</span></div>
+                    <div>Pos (X, Y): <span id="inspPos">-</span></div>
+                    <div>Speed: <span id="inspSpeed">-</span></div>
+                </div>
+            </div>
+
             <div class="canvas-controls-overlay">
                 <div class="timeline-container" style="max-width: 100%; display: flex; align-items: center; gap: 12px; background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #1e293b;">
                     <span style="font-family: monospace; font-size: 0.85rem; color: #94a3b8; min-width: 60px;">Timeline:</span>
