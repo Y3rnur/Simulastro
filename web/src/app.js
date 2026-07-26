@@ -171,15 +171,33 @@ function updateInspectorCard(body, isPinned, clientX, clientY) {
 
     inspId.textContent = body.id + (!body.alive ? ' (DEAD)' : '');
     inspMass.textContent = body.mass.toExponential(2);
-    inspRadius.textContent = body.radius.toFixed(1);
-    inspPos.textContent = `${body.x.toFixed(1)}, ${body.y.toFixed(1)}`;
 
     const speed = Math.sqrt((body.vx || 0) ** 2 + (body.vy || 0) ** 2);
     inspSpeed.textContent = speed.toFixed(2);
 
-    inspectorPinStatus.textContent = isPinned ? 'PINNED (CLICK TO UNPIN)' : 'HOVERING';
-    inspectorPinStatus.style.color = isPinned ? '#22c55e' : '#f59e0b';
-    inspectorPinStatus.style.background = isPinned ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+    const radiusRow = inspRadius.parentElement;
+    const posRow = inspPos.parentElement;
+
+    inspRadius.textContent = body.radius.toFixed(1);
+    inspPos.textContent = `${body.x.toFixed(1)}, ${body.y.toFixed(1)}`;
+
+    if (isPinned) {
+        inspRadius.textContent = body.radius.toFixed(3);
+        inspPos.textContent = `${body.x.toFixed(1)}, ${body.y.toFixed(1)}`;
+        if (radiusRow) radiusRow.style.display = 'block';
+        if (posRow) posRow.style.display = 'block';
+
+        inspectorPinStatus.textContent = 'PINNED (CLICK TO UNPIN)';
+        inspectorPinStatus.style.color = '#22c55e';
+        inspectorPinStatus.style.background = 'rgba(34, 197, 94, 0.1)';
+    } else {
+        if (radiusRow) radiusRow.style.display = 'none';
+        if (posRow) posRow.style.display = 'none';
+
+        inspectorPinStatus.textContent = 'HOVERING';
+        inspectorPinStatus.style.color = '#f59e0b';
+        inspectorPinStatus.style.background = 'rgba(245, 158, 11, 0.1)';
+    }
 
     inspectorCard.style.display = 'block';
 
