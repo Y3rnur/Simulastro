@@ -107,6 +107,123 @@ const inspPos = document.getElementById('inspPos');
 const inspSpeed = document.getElementById('inspSpeed');
 const inspectorPinStatus = document.getElementById('inspectorPinStatus');
 
+// Auth UI bindings
+const authEmailInput = document.getElementById('authEmailInput');
+const authPasswordInput = document.getElementById('authPasswordInput');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const loggedOutView = document.getElementById('loggedOutView');
+const loggedInView = document.getElementById('loggedInView');
+const userDisplayNameDisplay = document.getElementById('userDisplayNameDisplay');
+
+const registerModal = document.getElementById('registerModal');
+const openRegisterModalBtn = document.getElementById('openRegisterModalBtn');
+const closeRegisterModalBtn = document.getElementById('closeRegisterModalBtn');
+const submitRegisterBtn = document.getElementById('submitRegisterBtn');
+const regDisplayName = document.getElementById('regDisplayName');
+const regEmail = document.getElementById('regEmail');
+const regPassword = document.getElementById('regPassword');
+const regErrorMsg = document.getElementById('regErrorMsg');
+
+let currentUser = JSON.parse(localStorage.getItem('astrophysics_user')) || null;
+
+function updateAuthUI() {
+    if (currentUser) {
+        loggedOutView.style.display = 'none';
+        loggedInView.style.display = 'block';
+        userDisplayNameDisplay.textContent = currentUser.display_name;
+    } else {
+        loggedOutView.style.display = 'block';
+        loggedInView.style.display = 'none';
+        authEmailInput.value = '';
+        authPasswordInput.value = '';
+    }
+}
+updateAuthUI();
+
+// Modal open/close triggers
+openRegisterModalBtn.addEventListener('click', () => {
+    registerModal.style.display = 'flex';
+    regErrorMsg.style.display = 'none';
+});
+
+closeRegisterModalBtn.addEventListener('click', () => {
+    registerModal.style.display = 'none';
+});
+
+// Login handler
+loginBtn.addEventListener('click', async () => {
+    const email = authEmailInput.value.trim();
+    const password = authPasswordInput.value.trim();
+
+    if (!email || !password) return alert('Please enter both email and password.');
+
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            currentUser = data; // { display_name, email, message }
+            localStorage.setItem('astrophysics_user', JSON.stringify(currentUser));
+            updateAuthUI();
+        } else {
+            alert(data.message || 'Login failed');
+        }
+    } catch (err) {
+        console.error('Login network error:', err);
+        alert('Failed to connect to backend server.');
+    }
+});
+
+// Logout handler
+logoutBtn.addEventListener('click', () => {
+    currentUser = null;
+    localStorage.removeItem('astrophysics_user');
+    updateAuthUI();
+});
+
+// Registration submit handler
+submitRegisterBtn.addEventListener('click', async () => {
+    const display_name = regDisplayName.value.trim();
+    const email = regEmail.value.trim();
+    const password = regPassword.value.trim();
+
+    if (!display_name || !email || !password) {
+        regErrorMsg.textContent = 'All fields are required.';
+        regErrorMsg.style.display = 'block';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name, email, password })
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Registration successful! You can now log in.');
+            registerModal.style.display = 'none';
+            authEmailInput.value = email;
+            regDisplayName.value = '';
+            regEmail.value = '';
+            regPassword.value = '';
+        } else {
+            regErrorMsg.textContent = data.message || 'Registration failed.';
+            regErrorMsg.style.display = 'block';
+        }
+    } catch (err) {
+        console.error('Registration network error:', err);
+        regErrorMsg.textContent = 'Server connection error.';
+        regErrorMsg.style.display = 'block';
+    }
+});
+
 socket.onopen = () => {
     statusEl.textContent = 'Connected';
     statusEl.className = 'connected';

@@ -66,6 +66,26 @@
         </main>
 
         <aside class="control-panel">
+            <!-- Auth Widget Area -->
+            <div id="authWidget" style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 8px; padding: 10px; margin-bottom: 15px;">
+                <!-- Logged Out View -->
+                <div id="loggedOutView">
+                    <div style="font-size: 0.85rem; font-weight: bold; color: #38bdf8; margin-bottom: 8px;">🔐 Account Access</div>
+                    <input type="email" id="authEmailInput" placeholder="Email" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 6px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 6px;">
+                    <input type="password" id="authPasswordInput" placeholder="Password" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 6px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 8px;">
+                    <div style="display: flex; gap: 6px;">
+                        <button id="loginBtn" class="btn btn-primary" style="flex: 1; padding: 4px; font-size: 0.8rem;">Login</button>
+                        <button id="openRegisterModalBtn" class="btn" style="flex: 1; padding: 4px; font-size: 0.8rem; background: #1e293b; color: #f8fafc;">Register</button>
+                    </div>
+                </div>
+
+                <!-- Logged In View (hidden by default) -->
+                <div id="loggedInView" style="display: none; text-align: center;">
+                    <div style="font-size: 0.75rem; color: #94a3b8;">Logged in as</div>
+                    <div id="userDisplayNameDisplay" style="font-size: 0.95rem; font-weight: bold; color: #34d399; margin: 4px 0;">-</div>
+                    <button id="logoutBtn" class="btn btn-danger" style="width: 100%; padding: 4px; font-size: 0.75rem; margin-top: 4px;">Logout</button>
+                </div>
+            </div>
             <h2>🌌 Cosmic Control</h2>
             <div class="status-indicator">
                 Status: <span id="connectionStatus" class="disconnected">Disconnected</span>
@@ -86,6 +106,35 @@
                 <p>Active Bodies: <span id="telemetryBodies">0</span></p>
             </div>
         </aside>
+    </div>
+
+    <!-- Registration Modal Backdrop -->
+    <div id="registerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 24px; width: 320px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7); color: #f8fafc; font-family: monospace;">
+            <h3 style="margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px;">Register New User</h3>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Display Name:</label>
+                <input type="text" id="regDisplayName" placeholder="someone" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Email:</label>
+                <input type="email" id="regEmail" placeholder="someone@gmail.com" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Password:</label>
+                <input type="password" id="regPassword" placeholder="••••••••" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+            </div>
+
+            <div id="regErrorMsg" style="color: #ef4444; font-size: 0.75rem; margin-bottom: 10px; display: none;"></div>
+
+            <div style="display: flex; gap: 8px;">
+                <button id="submitRegisterBtn" class="btn btn-success" style="flex: 1; padding: 8px; font-size: 0.85rem;">Sign Up</button>
+                <button id="closeRegisterModalBtn" class="btn btn-danger" style="flex: 1; padding: 8px; font-size: 0.85rem;">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="src/app.js"></script>
