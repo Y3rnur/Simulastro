@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS scene_bodies;
+DROP TABLE IF EXISTS scenes;
+DROP TABLE IF EXISTS auth_sessions;
+DROP TABLE IF EXISTS users;

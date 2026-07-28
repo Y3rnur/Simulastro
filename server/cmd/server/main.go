@@ -10,7 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yernur/astrophysics_simulation/server/internal/auth"
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
+	dbqueries "github.com/yernur/astrophysics_simulation/server/internal/db"
 	"github.com/yernur/astrophysics_simulation/server/internal/websocket"
 	pb "github.com/yernur/astrophysics_simulation/server/proto"
 	"google.golang.org/grpc"
@@ -105,6 +108,25 @@ func TestingCache() { /* FOR TESTING THE CIRCULAR BUFFER OF TELEMETRY FRAMES */
 func main() {
 	fmt.Println("Initializing Go Command Server...")
 
+	// Database connection setup
+	ctx := context.Background()
+	dbConnString := "postgres://postgres:some_strong_password@localhost:5432/astrophysics_db?sslmode=disable"
+
+	dbPool, err := pgxpool.New(ctx, dbConnString)
+	if err != nil {
+		log.Fatalf("❌ Unable to connect to database: %v", err)
+	}
+	defer dbPool.Close()
+
+	if err := dbPool.Ping(ctx); err != nil {
+		log.Fatalf("❌ Database ping failed: %v", err)
+	}
+	fmt.Println("📦 Successfully connected to PostgreSQL database pool!")
+
+	// initialize sqlc queries wrapper
+	dbQueries := dbqueries.New(dbPool)
+	_ = dbQueries
+
 	maxHistorySlots := 20000
 	globalCache := cache.NewSimulationCache(maxHistorySlots)
 	fmt.Printf("Pre-allocated %d structural history frames in local system memory.\n", maxHistorySlots)
@@ -132,6 +154,10 @@ func main() {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(wsHub, globalCache, w, r)
 	})
+
+	authHandler := auth.NewAuthHandler(dbQueries)
+	http.HandleFunc("/api/register", authHandler.HandleRegister)
+	http.HandleFunc("/api/login", authHandler.HandleLogin)
 
 	webPort := ":8080"
 	go func() {
