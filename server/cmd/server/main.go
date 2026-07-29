@@ -152,7 +152,7 @@ func main() {
 	http.Handle("/", fs)
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		websocket.ServeWs(wsHub, globalCache, w, r)
+		websocket.ServeWs(wsHub, globalCache, dbQueries, w, r)
 	})
 
 	authHandler := auth.NewAuthHandler(dbQueries)

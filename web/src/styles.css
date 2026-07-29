@@ -89,6 +89,14 @@ h2, h3 {
 .btn-primary { background-color: #3b82f6; color: white; }
 .btn-primary:hover { background-color: #2563eb; }
 
+.btn-save { 
+    background-color: #10b981; 
+    color: white; 
+    margin-top: 8px; 
+    width: 100%; 
+}
+.btn-save:hover { background-color: #059669; }
+
 .stats-panel {
     background-color: #1e293b;
     padding: 16px;

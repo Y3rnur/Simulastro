@@ -17,6 +17,7 @@ const bodiesEl = document.getElementById('telemetryBodies');
 const playBtn = document.getElementById('playBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const historyBtn = document.getElementById('historyBtn');
+const saveSceneBtn = document.getElementById('saveSceneBtn');
 
 const timeSlider = document.getElementById('timeSlider');
 const sliderIndexDisplay = document.getElementById('sliderIndexDisplay');
@@ -1063,6 +1064,38 @@ function sendUploadScene(cb) {
     }));
 
     if (cb) cb();
+}
+
+function sendSaveScene() {
+    if (placementBodies.length === 0) {
+        console.warn("⚠️ No bodies on canvas to save!");
+        return;
+    }
+
+    const payload = {
+        type: 'SAVE_SCENE',
+        scene: {
+            bodies: placementBodies.map((b, index) => ({
+                id: b.id || index,
+                mass: b.mass,
+                radius: b.radius,
+                x: b.x,
+                y: b.y,
+                vx: b.vx || 0,
+                vy: b.vy || 0,
+                alive: true
+            }))
+        }
+    };
+
+    socket.send(JSON.stringify(payload));
+    console.log("💾 Sent payload: SAVE_SCENE to PostgreSQL");
+}
+
+if (saveSceneBtn) {
+    saveSceneBtn.onclick = () => {
+        sendSaveScene();
+    };
 }
 
 function sendControl(cmd) {

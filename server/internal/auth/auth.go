@@ -2,14 +2,24 @@ package auth
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/yernur/astrophysics_simulation/server/internal/db"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var jwtSecret = []byte("super_secret_cosmic_key_change_me_later")
+
+type Claims struct {
+	UserID string `json:"user_id"`
+	jwt.RegisteredClaims
+}
 
 type AuthHandler struct {
 	Queries *db.Queries
@@ -102,6 +112,41 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	parsedUUID, err := uuid.FromBytes(user.ID.Bytes[:])
+	var userIDStr string
+	if err == nil {
+		userIDStr = parsedUUID.String()
+	} else {
+		userIDStr = hex.EncodeToString(user.ID.Bytes[:])
+	}
+
+	// create JWT Token
+	expirationTime := time.Now().Add(24 * time.Hour)
+	claims := &Claims{
+		UserID: userIDStr,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// set HttpOnly Cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    tokenString,
+		Expires:  expirationTime,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -109,4 +154,9 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		"email":        user.Email,
 		"display_name": user.DisplayName,
 	})
+}
+
+func fmtUUIDToString(id pgtype.UUID) string {
+	b := id.Bytes
+	return string(b[:])
 }

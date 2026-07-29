@@ -4,12 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/yernur/astrophysics_simulation/server/internal/auth"
 	"github.com/yernur/astrophysics_simulation/server/internal/cache"
+	db "github.com/yernur/astrophysics_simulation/server/internal/db"
 	pb "github.com/yernur/astrophysics_simulation/server/proto"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -30,11 +36,13 @@ var upgrader = websocket.Upgrader{
 
 // Client represents the intermediary link between the frontend canvas and the server Hub
 type Client struct {
-	Hub      *Hub
-	Conn     *websocket.Conn
-	Send     chan []byte
-	simCache *cache.SimulationCache // reference to history cache for time-travel queries
-	isPaused bool                   // state valve for streaming gating
+	Hub       *Hub
+	Conn      *websocket.Conn
+	Send      chan []byte
+	simCache  *cache.SimulationCache // reference to history cache for time-travel queries
+	isPaused  bool                   // state valve for streaming gating
+	UserID    pgtype.UUID            // client's database user ID
+	DbQueries *db.Queries            // sqlc queries handle
 }
 
 // Small struct to parse the control payload
@@ -119,6 +127,7 @@ func handleSceneUpload(c *Client, scene *SceneDraft) {
 		return
 	}
 
+	// Forward to C++ engine via gRPC
 	pbBodies := make([]*pb.BodyState, len(scene.Bodies))
 	for i, b := range scene.Bodies {
 		pbBodies[i] = &pb.BodyState{
@@ -152,6 +161,65 @@ func handleSceneUpload(c *Client, scene *SceneDraft) {
 	}
 
 	log.Printf("✅ Scene successfully forwarded to C++ engine: %s", resp.Message)
+}
+
+func handleSaveScene(c *Client, scene *SceneDraft, userID pgtype.UUID, dbQueries *db.Queries) {
+	if scene == nil || len(scene.Bodies) == 0 {
+		c.SendError("Empty scene received for saving")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Generate a new pgtype.UUID for the scene
+	var sceneID pgtype.UUID
+	if err := sceneID.Scan(uuid.New().String()); err != nil {
+		log.Printf("❌ Failed to generate scene UUID: %v", err)
+		c.SendError("Internal server error")
+		return
+	}
+
+	sceneName := fmt.Sprintf("Custom Cosmic Layout %s", time.Now().Format("Jan 02 15:04"))
+
+	log.Printf("🔍 DEBUG: About to call CreateScene. UserID Valid: %v, Bytes: %v", userID.Valid, userID.Bytes)
+
+	_, dbErr := dbQueries.CreateScene(ctx, db.CreateSceneParams{
+		ID:       sceneID,
+		UserID:   userID,
+		Name:     sceneName,
+		IsPublic: false,
+	})
+	if dbErr != nil {
+		log.Printf("❌ Failed to save scene to database: %v", dbErr)
+		c.SendError("Failed to persist scene in database")
+		return
+	}
+
+	// Insert each body
+	for index, b := range scene.Bodies {
+		var bodyUUID pgtype.UUID
+		_ = bodyUUID.Scan(uuid.New().String())
+
+		err := dbQueries.InsertSceneBody(ctx, db.InsertSceneBodyParams{
+			ID:        bodyUUID,
+			SceneID:   sceneID,
+			BodyIndex: int32(index),
+			BodyID:    int32(b.ID),
+			Mass:      b.Mass,
+			Radius:    b.Radius,
+			X:         b.X,
+			Y:         b.Y,
+			Vx:        b.Vx,
+			Vy:        b.Vy,
+			Alive:     b.Alive,
+		})
+		if err != nil {
+			log.Printf("⚠️ Failed to insert scene body %d: %v", b.ID, err)
+		}
+	}
+
+	log.Printf("💾 Scene successfully saved to PostgreSQL! Scene ID: %s", sceneID.Bytes)
 }
 
 func handleFetchHistory(c *Client) {
@@ -248,6 +316,9 @@ func (c *Client) ReadPump() {
 		case "UPLOAD_SCENE":
 			log.Printf("Trying to hit the UPLOAD_SCENE (debugging)...")
 			handleSceneUpload(c, msg.Scene)
+		case "SAVE_SCENE":
+			log.Printf("💾 Received SAVE_SCENE request from frontend...")
+			handleSaveScene(c, msg.Scene, c.UserID, c.DbQueries)
 		case "FETCH_HISTORY":
 			handleFetchHistory(c)
 		case "SET_SPEED":
@@ -303,14 +374,49 @@ func (c *Client) WritePump() {
 }
 
 // ServeWs upgrades the raw HTTP connection to a full bi-directional WebSocket client link
-func ServeWs(hub *Hub, simCache *cache.SimulationCache, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, simCache *cache.SimulationCache, dbQueries *db.Queries, w http.ResponseWriter, r *http.Request) {
+	// extract and validate the auth cookie
+	cookie, err := r.Cookie("auth_token")
+	if err != nil {
+		log.Printf("❌ Cookie read error: %v", err)
+	} else {
+		log.Printf("🍪 Found cookie string: %s", cookie.Value)
+	}
+	var userID pgtype.UUID
+
+	if err == nil && cookie != nil {
+		claims := &auth.Claims{}
+		token, parseErr := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte("super_secret_cosmic_key_change_me_later"), nil
+		})
+
+		if parseErr == nil && token.Valid {
+			if parseErr := userID.Scan(claims.UserID); parseErr != nil {
+				log.Printf("⚠️ Failed to scan JWT UserID into pgtype.UUID: %v", parseErr)
+			}
+		} else {
+			log.Printf("⚠️ Invalid or expired auth token in WebSocket connection: %v", parseErr)
+		}
+	} else {
+		log.Printf("⚠️ No auth_token cookie found on WebSocket connection (guest mode)")
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("❌ Failed to execute WebSocket protocol upgrade: %v", err)
 		return
 	}
 
-	client := &Client{Hub: hub, Conn: conn, Send: make(chan []byte, 1024), simCache: simCache, isPaused: false}
+	client := &Client{
+		Hub:       hub,
+		Conn:      conn,
+		Send:      make(chan []byte, 1024),
+		simCache:  simCache,
+		isPaused:  false,
+		DbQueries: dbQueries,
+		UserID:    userID,
+	}
+
 	client.Hub.Register <- client
 
 	// Launch individual client execution run routines onto independent lightweight concurrent spaces
