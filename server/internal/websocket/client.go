@@ -51,6 +51,7 @@ type WSMessage struct {
 	Command    string      `json:"command,omitempty"`
 	Multiplier float64     `json:"multiplier,omitempty"`
 	Scene      *SceneDraft `json:"scene,omitempty"`
+	SceneID    string      `json:"scene_id,omitempty"`
 }
 
 type SceneDraft struct {
@@ -66,6 +67,12 @@ type DraftBody struct {
 	Vx     float64 `json:"vx"`
 	Vy     float64 `json:"vy"`
 	Alive  bool    `json:"alive"`
+}
+
+type SceneSummaryResponse struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (c *Client) SendError(msg string) {
@@ -222,6 +229,92 @@ func handleSaveScene(c *Client, scene *SceneDraft, userID pgtype.UUID, dbQueries
 	log.Printf("💾 Scene successfully saved to PostgreSQL! Scene ID: %s", sceneID.Bytes)
 }
 
+func handleListScenes(c *Client) {
+	if !c.UserID.Valid {
+		c.SendError("Unauthorized: must be logged in to view saved scenes")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	dbScenes, err := c.DbQueries.GetScenesByUserId(ctx, c.UserID)
+	if err != nil {
+		log.Printf("❌ Failed to fetch user scenes: %v", err)
+		c.SendError("Failed to fetch scenes from database")
+		return
+	}
+
+	log.Printf("📂 Found %d scenes for user %s", len(dbScenes), c.UserID.String())
+
+	scenes := make([]SceneSummaryResponse, len(dbScenes))
+	for i, s := range dbScenes {
+		uuidStr, _ := s.ID.Value()
+
+		var createdAtTime time.Time
+		if s.CreatedAt.Valid {
+			createdAtTime = s.CreatedAt.Time
+		}
+
+		scenes[i] = SceneSummaryResponse{
+			ID:        fmt.Sprintf("%v", uuidStr),
+			Name:      s.Name,
+			CreatedAt: createdAtTime,
+		}
+	}
+
+	response := map[string]interface{}{
+		"type":   "SCENE_LIST",
+		"scenes": scenes,
+	}
+	bytes, _ := json.Marshal(response)
+	c.Send <- bytes
+}
+
+func handleLoadScene(c *Client, sceneIDStr string) {
+	var sceneID pgtype.UUID
+	if err := sceneID.Scan(sceneIDStr); err != nil {
+		c.SendError("Invalid scene ID format")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	dbBodies, err := c.DbQueries.GetSceneBodiesBySceneId(ctx, sceneID)
+	if err != nil {
+		log.Printf("❌ Failed to load bodies for scene %s: %v", sceneIDStr, err)
+		c.SendError("Failed to load scene bodies")
+		return
+	}
+
+	// map database rows back into DraftBody format
+	bodies := make([]DraftBody, len(dbBodies))
+	for i, b := range dbBodies {
+		bodies[i] = DraftBody{
+			ID:     int(b.BodyID),
+			Mass:   b.Mass,
+			Radius: b.Radius,
+			X:      b.X,
+			Y:      b.Y,
+			Vx:     b.Vx,
+			Vy:     b.Vy,
+			Alive:  true,
+		}
+	}
+
+	response := map[string]interface{}{
+		"type": "LOADED_SCENE",
+		"scene": map[string]interface{}{
+			"id":     sceneIDStr,
+			"bodies": bodies,
+		},
+	}
+	bytes, _ := json.Marshal(response)
+	c.Send <- bytes
+	log.Printf("📂 Scene %s successfully loaded and sent to client", sceneIDStr)
+}
+
 func handleFetchHistory(c *Client) {
 	if !c.isPaused {
 		c.SendError("Must be PAUSED to fetch history")
@@ -319,6 +412,12 @@ func (c *Client) ReadPump() {
 		case "SAVE_SCENE":
 			log.Printf("💾 Received SAVE_SCENE request from frontend...")
 			handleSaveScene(c, msg.Scene, c.UserID, c.DbQueries)
+		case "LIST_SCENES":
+			log.Printf("💾 Received LIST_SCENES request from frontend...")
+			handleListScenes(c)
+		case "LOAD_SCENE":
+			log.Printf("💾 Received LOAD_SCENE request from frontend...")
+			handleLoadScene(c, msg.SceneID)
 		case "FETCH_HISTORY":
 			handleFetchHistory(c)
 		case "SET_SPEED":
@@ -348,9 +447,10 @@ func (c *Client) WritePump() {
 			}
 
 			if c.isPaused {
-				// still allow HISTORY envelopes while paused so the client can fetch and
-				// replay cached frames — detect HISTORY by a simple substring check
-				if !bytes.Contains(message, []byte("\"HISTORY\"")) {
+				// allow HISTORY, LOADED_SCENE, and SCENE_LIST envelopes while paused
+				if !bytes.Contains(message, []byte("\"HISTORY\"")) &&
+					!bytes.Contains(message, []byte("\"LOADED_SCENE\"")) &&
+					!bytes.Contains(message, []byte("\"SCENE_LIST\"")) {
 					continue
 				}
 			}

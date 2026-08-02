@@ -117,6 +117,7 @@ const loggedOutView = document.getElementById('loggedOutView');
 const loggedInView = document.getElementById('loggedInView');
 const userDisplayNameDisplay = document.getElementById('userDisplayNameDisplay');
 
+// Register modal bindings
 const registerModal = document.getElementById('registerModal');
 const openRegisterModalBtn = document.getElementById('openRegisterModalBtn');
 const closeRegisterModalBtn = document.getElementById('closeRegisterModalBtn');
@@ -125,6 +126,19 @@ const regDisplayName = document.getElementById('regDisplayName');
 const regEmail = document.getElementById('regEmail');
 const regPassword = document.getElementById('regPassword');
 const regErrorMsg = document.getElementById('regErrorMsg');
+
+// Load scene modal bindings
+const loadSceneModal = document.getElementById('loadSceneModal');
+const openLoadModalBtn = document.getElementById('openLoadModalBtn');
+const closeLoadModalBtn = document.getElementById('closeLoadModalBtn');
+const refreshScenesModalBtn = document.getElementById('refreshScenesModalBtn');
+const modalSceneSelectDropdown = document.getElementById('modalSceneSelectDropdown');
+const confirmLoadSceneBtn = document.getElementById('confirmLoadSceneBtn');
+
+// Save confirm modal bindings
+const saveConfirmModal = document.getElementById('saveConfirmModal');
+const confirmSaveBtn = document.getElementById('confirmSaveBtn');
+const cancelSaveBtn = document.getElementById('cancelSaveBtn');
 
 let currentUser = JSON.parse(localStorage.getItem('astrophysics_user')) || null;
 
@@ -717,6 +731,66 @@ socket.onmessage = (event) => {
         previousLiveBodiesMap.clear();
         return;
     }
+
+    if (packet.type === 'SCENE_LIST') {
+        console.log("Received scenes list:", packet.scenes);
+        modalSceneSelectDropdown.innerHTML = '';
+        
+        if (!packet.scenes || packet.scenes.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = "";
+            opt.textContent = "No saved scenes found.";
+            opt.disabled = true;
+            modalSceneSelectDropdown.appendChild(opt);
+            confirmLoadSceneBtn.disabled = true;
+            return;
+        }
+
+        packet.scenes.forEach(scene => {
+            const option = document.createElement('option');
+            const sceneId = scene.id || scene.ID;
+            const sceneName = scene.name || scene.Name || "Unnamed Scene";
+            const sceneDate = scene.created_at || scene.CreatedAt;
+
+            option.value = scene.id;
+            const dateStr = sceneDate ? new Date(sceneDate).toLocaleString() : '';
+            option.textContent = `${sceneName} [${sceneId ? sceneId.substring(0, 8) : 'unknown'}] - ${dateStr}`;
+            modalSceneSelectDropdown.appendChild(option);
+        });
+        confirmLoadSceneBtn.disabled = !modalSceneSelectDropdown.value;
+    }
+
+    if (packet.type === 'LOADED_SCENE') {
+        console.log("Loaded scene bodies into placement array:", packet.scene);
+        placementMode = true;
+        currentHistoryFrame = null;
+        currentLiveFrame = null;
+        historicalTimelineCache = [];
+        
+        // Map backend bodies directly into frontend placement array
+        placementBodies = packet.scene.bodies.map((b, index) => ({
+            id: b.id || (1000 + index),
+            mass: b.mass,
+            radius: b.radius,
+            x: b.x,
+            y: b.y,
+            vx: b.vx || 0,
+            vy: b.vy || 0,
+            alive: true
+        }));
+
+        if (typeof timeSlider !== 'undefined' && timeSlider) {
+            timeSlider.value = 0;
+            timeSlider.disabled = true;
+        }
+
+        if (placementToggle) placementToggle.checked = true;
+        if (placementControls) placementControls.style.display = 'block';
+
+        if (loadSceneModal) {
+            loadSceneModal.style.display = 'none';
+        }
+    }
 };
 
 // Timeline range slider movements
@@ -1094,8 +1168,81 @@ function sendSaveScene() {
 
 if (saveSceneBtn) {
     saveSceneBtn.onclick = () => {
-        sendSaveScene();
+        if (placementBodies.length === 0) {
+            console.warn("⚠️ No bodies on canvas to save!");
+            return;
+        }
+
+        if (saveConfirmModal) {
+            saveConfirmModal.style.display = 'flex';
+        }
     };
+}
+
+if (confirmSaveBtn) {
+    confirmSaveBtn.onclick = () => {
+        sendSaveScene();
+        if (saveConfirmModal) saveConfirmModal.style.display = 'none';
+    }
+}
+
+if (cancelSaveBtn) {
+    cancelSaveBtn.onclick = () => {
+        if (saveConfirmModal) saveConfirmModal.style.display = 'none';
+    };
+}
+
+// Open modal & request list
+if (openLoadModalBtn) {
+    openLoadModalBtn.onclick = () => {
+        loadSceneModal.style.display = 'flex';
+        requestSceneList();
+    };
+}
+
+// Close modal
+if (closeLoadModalBtn) {
+    closeLoadModalBtn.onclick = () => {
+        loadSceneModal.style.display = 'none';
+    };
+}
+
+// Refresh list button inside modal
+if (refreshScenesModalBtn) {
+    refreshScenesModalBtn.onclick = () => {
+        requestSceneList();
+    };
+}
+
+// Enable/Disable load button on selection change
+if (modalSceneSelectDropdown) {
+    modalSceneSelectDropdown.onchange = (e) => {
+        confirmLoadSceneBtn.disabled = !e.target.value;
+    };
+}
+
+// Confirm Load Action
+if (confirmLoadSceneBtn) {
+    confirmLoadSceneBtn.onclick = () => {
+        const selectedId = modalSceneSelectDropdown.value;
+        if (selectedId) {
+            socket.send(JSON.stringify({ 
+                type: 'LOAD_SCENE', 
+                scene_id: selectedId 
+            }));
+            console.log(`📤 Requested load for scene ID: ${selectedId}`);
+        }
+    };
+}
+
+// Helper for LIST_SCENES
+function requestSceneList() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'LIST_SCENES' }));
+        console.log("📤 Requested user scenes list");
+    } else {
+        console.warn("⚠️ WebSocket not connected");
+    }
 }
 
 function sendControl(cmd) {
