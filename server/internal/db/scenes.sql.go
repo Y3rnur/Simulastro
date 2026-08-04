@@ -52,6 +52,15 @@ func (q *Queries) CreateScene(ctx context.Context, arg CreateSceneParams) (Creat
 	return i, err
 }
 
+const deleteScene = `-- name: DeleteScene :exec
+DELETE FROM scenes WHERE id = $1
+`
+
+func (q *Queries) DeleteScene(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteScene, id)
+	return err
+}
+
 const getSceneBodiesBySceneId = `-- name: GetSceneBodiesBySceneId :many
 SELECT body_id, mass, radius, x, y, vx, vy
 FROM scene_bodies

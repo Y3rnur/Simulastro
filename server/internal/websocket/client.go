@@ -315,6 +315,33 @@ func handleLoadScene(c *Client, sceneIDStr string) {
 	log.Printf("📂 Scene %s successfully loaded and sent to client", sceneIDStr)
 }
 
+func handleDeleteScene(c *Client, sceneIDStr string) {
+	if !c.UserID.Valid {
+		c.SendError("Unauthorized: must be logged in to delete scenes")
+		return
+	}
+
+	var sceneID pgtype.UUID
+	if err := sceneID.Scan(sceneIDStr); err != nil {
+		c.SendError("Invalid scene ID format for deletion")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := c.DbQueries.DeleteScene(ctx, sceneID)
+	if err != nil {
+		log.Printf("❌ Failed to delete scene %s: %v", sceneIDStr, err)
+		c.SendError("Failed to delete scene from database")
+		return
+	}
+
+	log.Printf("🗑️ Scene %s successfully deleted by user %s", sceneIDStr, c.UserID.String())
+
+	handleListScenes(c)
+}
+
 func handleFetchHistory(c *Client) {
 	if !c.isPaused {
 		c.SendError("Must be PAUSED to fetch history")
@@ -418,6 +445,8 @@ func (c *Client) ReadPump() {
 		case "LOAD_SCENE":
 			log.Printf("💾 Received LOAD_SCENE request from frontend...")
 			handleLoadScene(c, msg.SceneID)
+		case "DELETE_SCENE":
+			handleDeleteScene(c, msg.SceneID)
 		case "FETCH_HISTORY":
 			handleFetchHistory(c)
 		case "SET_SPEED":

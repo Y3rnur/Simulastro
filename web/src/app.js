@@ -127,12 +127,14 @@ const regEmail = document.getElementById('regEmail');
 const regPassword = document.getElementById('regPassword');
 const regErrorMsg = document.getElementById('regErrorMsg');
 
+let selectedSceneId = null;
+
 // Load scene modal bindings
 const loadSceneModal = document.getElementById('loadSceneModal');
 const openLoadModalBtn = document.getElementById('openLoadModalBtn');
 const closeLoadModalBtn = document.getElementById('closeLoadModalBtn');
 const refreshScenesModalBtn = document.getElementById('refreshScenesModalBtn');
-const modalSceneSelectDropdown = document.getElementById('modalSceneSelectDropdown');
+const modalSceneListContainer = document.getElementById('modalSceneListContainer');
 const confirmLoadSceneBtn = document.getElementById('confirmLoadSceneBtn');
 
 // Save confirm modal bindings
@@ -734,30 +736,7 @@ socket.onmessage = (event) => {
 
     if (packet.type === 'SCENE_LIST') {
         console.log("Received scenes list:", packet.scenes);
-        modalSceneSelectDropdown.innerHTML = '';
-        
-        if (!packet.scenes || packet.scenes.length === 0) {
-            const opt = document.createElement('option');
-            opt.value = "";
-            opt.textContent = "No saved scenes found.";
-            opt.disabled = true;
-            modalSceneSelectDropdown.appendChild(opt);
-            confirmLoadSceneBtn.disabled = true;
-            return;
-        }
-
-        packet.scenes.forEach(scene => {
-            const option = document.createElement('option');
-            const sceneId = scene.id || scene.ID;
-            const sceneName = scene.name || scene.Name || "Unnamed Scene";
-            const sceneDate = scene.created_at || scene.CreatedAt;
-
-            option.value = scene.id;
-            const dateStr = sceneDate ? new Date(sceneDate).toLocaleString() : '';
-            option.textContent = `${sceneName} [${sceneId ? sceneId.substring(0, 8) : 'unknown'}] - ${dateStr}`;
-            modalSceneSelectDropdown.appendChild(option);
-        });
-        confirmLoadSceneBtn.disabled = !modalSceneSelectDropdown.value;
+        renderSceneList(packet.scenes);
     }
 
     if (packet.type === 'LOADED_SCENE') {
@@ -1214,23 +1193,16 @@ if (refreshScenesModalBtn) {
     };
 }
 
-// Enable/Disable load button on selection change
-if (modalSceneSelectDropdown) {
-    modalSceneSelectDropdown.onchange = (e) => {
-        confirmLoadSceneBtn.disabled = !e.target.value;
-    };
-}
-
 // Confirm Load Action
 if (confirmLoadSceneBtn) {
     confirmLoadSceneBtn.onclick = () => {
-        const selectedId = modalSceneSelectDropdown.value;
-        if (selectedId) {
+        if (selectedSceneId) {
             socket.send(JSON.stringify({ 
                 type: 'LOAD_SCENE', 
-                scene_id: selectedId 
+                scene_id: selectedSceneId 
             }));
-            console.log(`📤 Requested load for scene ID: ${selectedId}`);
+            console.log(`📤 Requested load for scene ID: ${selectedSceneId}`);
+            loadSceneModal.style.display = 'none';
         }
     };
 }
@@ -1243,6 +1215,57 @@ function requestSceneList() {
     } else {
         console.warn("⚠️ WebSocket not connected");
     }
+}
+
+// Function to render scenes list (called when SCENE_LIST message arrives from backend)
+function renderSceneList(scenes) {
+    modalSceneListContainer.innerHTML = '';
+    selectedSceneId = null;
+    confirmLoadSceneBtn.disabled = true;
+
+    if (!scenes || scenes.length === 0) {
+        modalSceneListContainer.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 12px;">No saved scenes found.</div>';
+        return;
+    }
+
+    scenes.forEach(scene => {
+        const row = document.createElement('div');
+        row.style.cssText = "display: flex; justify-content: space-between; align-items: center; background: #0f172a; border: 1px solid #1e293b; padding: 8px 10px; border-radius: 4px; cursor: pointer; transition: border-color 0.2s;";
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = "font-size: 0.8rem; color: #f8fafc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
+        nameSpan.textContent = scene.name;
+        nameSpan.title = scene.name;
+
+        row.onclick = () => {
+            document.querySelectorAll('.scene-row-item').forEach(r => r.style.borderColor = '#1e293b');
+            row.style.borderColor = '#38bdf8';
+            selectedSceneId = scene.id;
+            confirmLoadSceneBtn.removeAttribute('disabled');
+        };
+        row.classList.add('scene-row-item');
+
+        // Delete Button payload sender
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.title = 'Delete Scene';
+        deleteBtn.style.cssText = "background: rgba(239, 68, 68, 0.1); border: 1px solid #7f1d1d; color: #ef4444; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem; margin-left: 8px;";
+        
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`Are you sure you want to delete scene "${scene.name}"?`)) {
+                socket.send(JSON.stringify({
+                    type: 'DELETE_SCENE',
+                    scene_id: scene.id
+                }));
+                console.log(`📤 Requested deletion for scene ID: ${scene.id}`);
+            }
+        };
+
+        row.appendChild(nameSpan);
+        row.appendChild(deleteBtn);
+        modalSceneListContainer.appendChild(row);
+    });
 }
 
 function sendControl(cmd) {

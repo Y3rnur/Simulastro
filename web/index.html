@@ -149,9 +149,9 @@
             
             <div style="margin-bottom: 16px;">
                 <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 6px;">Select a scene from your vault:</label>
-                <select id="modalSceneSelectDropdown" size="6" style="width: 100%; box-sizing: border-box; background: #020617; border: 1px solid #334155; color: #fff; padding: 6px; border-radius: 6px; font-size: 0.8rem; outline: none;">
-                    <option value="" disabled style="color: #64748b;">Loading or no scenes found...</option>
-                </select>
+                <div id="modalSceneListContainer" style="max-height: 200px; overflow-y: auto; background: #020617; border: 1px solid #334155; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px;">
+                    <div style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 12px;">Loading or no scenes found...</div>
+                </div>
             </div>
 
             <div id="loadModalErrorMsg" style="color: #ef4444; font-size: 0.75rem; margin-bottom: 10px; display: none;"></div>

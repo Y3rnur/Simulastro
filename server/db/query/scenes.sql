@@ -17,3 +17,6 @@ ORDER BY updated_at DESC;
 SELECT body_id, mass, radius, x, y, vx, vy
 FROM scene_bodies
 WHERE scene_id = $1;
+
+-- name: DeleteScene :exec
+DELETE FROM scenes WHERE id = $1;
