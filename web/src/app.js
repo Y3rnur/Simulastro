@@ -492,6 +492,13 @@ function findBodyAtScreenCord(sx, sy) {
     return null;
 }
 
+function updateNextBodyId(bodies) {
+    if (!bodies || bodies.length === 0) return;
+    const maxId = bodies.reduce((max, b) => Math.max(max, Number(b.id) || 0), 0);
+    nextBodyId = Math.max(1000, maxId + 1);
+    console.log(`🔄 nextBodyId synchronized to: ${nextBodyId}`);
+}
+
 function updateTrails(frame) {
     if (!frame || !frame.bodies) return;
     const idsSeen = new Set();
@@ -767,6 +774,8 @@ socket.onmessage = (event) => {
             vy: b.vy || 0,
             alive: true
         }));
+
+        updateNextBodyId(placementBodies);
 
         if (typeof timeSlider !== 'undefined' && timeSlider) {
             timeSlider.value = 0;
