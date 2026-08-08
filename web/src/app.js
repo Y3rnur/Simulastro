@@ -142,6 +142,16 @@ const saveConfirmModal = document.getElementById('saveConfirmModal');
 const confirmSaveBtn = document.getElementById('confirmSaveBtn');
 const cancelSaveBtn = document.getElementById('cancelSaveBtn');
 
+// Edit scene modal bindings
+const editSceneModal = document.getElementById('editSceneModal');
+const closeEditModalBtn = document.getElementById('closeEditModalBtn');
+const cancelEditModalBtn = document.getElementById('cancelEditModalBtn');
+const confirmEditSceneBtn = document.getElementById('confirmEditSceneBtn');
+const editSceneNameInput = document.getElementById('editSceneNameInput');
+const editSceneDescInput = document.getElementById('editSceneDescInput');
+
+let editingSceneId = null;
+
 let currentUser = JSON.parse(localStorage.getItem('astrophysics_user')) || null;
 
 function updateAuthUI() {
@@ -1232,10 +1242,21 @@ function renderSceneList(scenes) {
         const row = document.createElement('div');
         row.style.cssText = "display: flex; justify-content: space-between; align-items: center; background: #0f172a; border: 1px solid #1e293b; padding: 8px 10px; border-radius: 4px; cursor: pointer; transition: border-color 0.2s;";
         
+        const textWrapper = document.createElement('div');
+        textWrapper.style.cssText = "display: flex; flex-direction: column; flex: 1; overflow: hidden; margin-right: 8px;";
+
         const nameSpan = document.createElement('span');
         nameSpan.style.cssText = "font-size: 0.8rem; color: #f8fafc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
         nameSpan.textContent = scene.name;
         nameSpan.title = scene.name;
+
+        const descSpan = document.createElement('span');
+        descSpan.style.cssText = "font-size: 0.7rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;";
+        const sceneDesc = scene.descriptions || scene.Descriptions || "";
+        descSpan.textContent = sceneDesc ? sceneDesc : "No description provided.";
+
+        textWrapper.appendChild(nameSpan);
+        textWrapper.appendChild(descSpan);
 
         row.onclick = () => {
             document.querySelectorAll('.scene-row-item').forEach(r => r.style.borderColor = '#1e293b');
@@ -1244,6 +1265,24 @@ function renderSceneList(scenes) {
             confirmLoadSceneBtn.removeAttribute('disabled');
         };
         row.classList.add('scene-row-item');
+
+        // Actions container (Edit & Delete buttons)
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.cssText = "display: flex; gap: 4px; align-items: center;";
+
+        // Edit Button
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✏️';
+        editBtn.title = 'Edit Scene Metadata';
+        editBtn.style.cssText = "background: rgba(56, 189, 248, 0.1); border: 1px solid #0369a1; color: #38bdf8; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;";
+        
+        editBtn.onclick = (e) => {
+            e.stopPropagation(); // Prevent selecting row
+            editingSceneId = scene.id;
+            editSceneNameInput.value = scene.name;
+            editSceneDescInput.value = sceneDesc;
+            editSceneModal.style.display = 'flex';
+        };
 
         // Delete Button payload sender
         const deleteBtn = document.createElement('button');
@@ -1262,11 +1301,43 @@ function renderSceneList(scenes) {
             }
         };
 
-        row.appendChild(nameSpan);
-        row.appendChild(deleteBtn);
+        actionsDiv.appendChild(editBtn);
+        actionsDiv.appendChild(deleteBtn);
+
+        row.appendChild(textWrapper);
+        row.appendChild(actionsDiv);
         modalSceneListContainer.appendChild(row);
     });
 }
+
+confirmEditSceneBtn.onclick = () => {
+    if (!editingSceneId) return;
+
+    const newName = editSceneNameInput.value.trim();
+    const newDesc = editSceneDescInput.value.trim();
+
+    if (!newName) {
+        alert("Scene name cannot be empty!");
+        return;
+    }
+
+    socket.send(JSON.stringify({
+        type: 'UPDATE_SCENE',
+        scene_id: editingSceneId,
+        name: newName,
+        descriptions: newDesc
+    }));
+
+    console.log(`📤 Requested update for scene ID: ${editingSceneId}`);
+    closeEditModal();
+};
+
+function closeEditModal() {
+    editSceneModal.style.display = 'none';
+    editingSceneId = null;
+}
+closeEditModalBtn.onclick = closeEditModal;
+cancelEditModalBtn.onclick = closeEditModal;
 
 function sendControl(cmd) {
     socket.send(JSON.stringify({ type: 'CONTROL', command: cmd}));

@@ -47,11 +47,13 @@ type Client struct {
 
 // Small struct to parse the control payload
 type WSMessage struct {
-	Type       string      `json:"type"`
-	Command    string      `json:"command,omitempty"`
-	Multiplier float64     `json:"multiplier,omitempty"`
-	Scene      *SceneDraft `json:"scene,omitempty"`
-	SceneID    string      `json:"scene_id,omitempty"`
+	Type         string      `json:"type"`
+	Command      string      `json:"command,omitempty"`
+	Multiplier   float64     `json:"multiplier,omitempty"`
+	Scene        *SceneDraft `json:"scene,omitempty"`
+	SceneID      string      `json:"scene_id,omitempty"`
+	Name         string      `json:"name,omitempty"`
+	Descriptions string      `json:"descriptions,omitempty"`
 }
 
 type SceneDraft struct {
@@ -70,9 +72,10 @@ type DraftBody struct {
 }
 
 type SceneSummaryResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Descriptions string    `json:"descriptions"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func (c *Client) SendError(msg string) {
@@ -257,9 +260,10 @@ func handleListScenes(c *Client) {
 		}
 
 		scenes[i] = SceneSummaryResponse{
-			ID:        fmt.Sprintf("%v", uuidStr),
-			Name:      s.Name,
-			CreatedAt: createdAtTime,
+			ID:           fmt.Sprintf("%v", uuidStr),
+			Name:         s.Name,
+			Descriptions: s.Descriptions.String,
+			CreatedAt:    createdAtTime,
 		}
 	}
 
@@ -339,6 +343,34 @@ func handleDeleteScene(c *Client, sceneIDStr string) {
 
 	log.Printf("🗑️ Scene %s successfully deleted by user %s", sceneIDStr, c.UserID.String())
 
+	handleListScenes(c)
+}
+
+func handleUpdateScene(c *Client, sceneIDStr string, name string, descriptions string) {
+	var sceneUUID pgtype.UUID
+	if err := sceneUUID.Scan(sceneIDStr); err != nil {
+		log.Printf("❌ Invalid scene UUID format for update: %v", err)
+		return
+	}
+
+	descText := pgtype.Text{String: descriptions, Valid: descriptions != ""}
+
+	err := c.DbQueries.UpdateSceneMetadata(context.Background(), db.UpdateSceneMetadataParams{
+		Name:         name,
+		Descriptions: descText,
+		ID:           sceneUUID,
+		UserID:       c.UserID,
+	})
+
+	if err != nil {
+		log.Printf("❌ Failed to update scene metadata: %v", err)
+		return
+	}
+
+	log.Printf("✅ Scene %s successfully updated by user %s", sceneIDStr, c.UserID)
+	log.Printf("Description is: %v", descText)
+
+	// refresh scene list after updating scene description/metadata
 	handleListScenes(c)
 }
 
@@ -447,6 +479,8 @@ func (c *Client) ReadPump() {
 			handleLoadScene(c, msg.SceneID)
 		case "DELETE_SCENE":
 			handleDeleteScene(c, msg.SceneID)
+		case "UPDATE_SCENE":
+			handleUpdateScene(c, msg.SceneID, msg.Name, msg.Descriptions)
 		case "FETCH_HISTORY":
 			handleFetchHistory(c)
 		case "SET_SPEED":

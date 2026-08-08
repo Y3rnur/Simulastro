@@ -106,17 +106,18 @@ func (q *Queries) GetSceneBodiesBySceneId(ctx context.Context, sceneID pgtype.UU
 }
 
 const getScenesByUserId = `-- name: GetScenesByUserId :many
-SELECT id, name, created_at, updated_at
+SELECT id, name, descriptions, created_at, updated_at
 FROM scenes
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
 
 type GetScenesByUserIdRow struct {
-	ID        pgtype.UUID
-	Name      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID           pgtype.UUID
+	Name         string
+	Descriptions pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 func (q *Queries) GetScenesByUserId(ctx context.Context, userID pgtype.UUID) ([]GetScenesByUserIdRow, error) {
@@ -131,6 +132,7 @@ func (q *Queries) GetScenesByUserId(ctx context.Context, userID pgtype.UUID) ([]
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.Descriptions,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -176,6 +178,29 @@ func (q *Queries) InsertSceneBody(ctx context.Context, arg InsertSceneBodyParams
 		arg.Vx,
 		arg.Vy,
 		arg.Alive,
+	)
+	return err
+}
+
+const updateSceneMetadata = `-- name: UpdateSceneMetadata :exec
+UPDATE scenes 
+SET name = $1, descriptions = $2, updated_at = NOW()
+WHERE id = $3 AND user_id = $4
+`
+
+type UpdateSceneMetadataParams struct {
+	Name         string
+	Descriptions pgtype.Text
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+}
+
+func (q *Queries) UpdateSceneMetadata(ctx context.Context, arg UpdateSceneMetadataParams) error {
+	_, err := q.db.Exec(ctx, updateSceneMetadata,
+		arg.Name,
+		arg.Descriptions,
+		arg.ID,
+		arg.UserID,
 	)
 	return err
 }
