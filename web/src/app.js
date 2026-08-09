@@ -66,6 +66,12 @@ const hiddenBodies = new Set();       // body IDs to skip rendering (post-explos
 const explosions = new Map();         // id -> { particles: [{x,y,vx,vy,ttl,age,size,color}], startedAt }
 const deathFades = new Map();         // id -> { alpha: number, remainingMs: number }
 
+// Camera movement pan offset parameters
+let cameraOffsetX = 0;
+let cameraOffsetY = 0;
+let isDraggingCamera = false;
+let cameraDragStart = { x: 0, y: 0 };
+
 // Auto-zoom config
 const AUTO_ZOOM_TARGET_FRACTION = 0.05;
 const AUTO_ZOOM_MIN = 0.000001;
@@ -277,8 +283,8 @@ function normalizeBody(b) {
 }
 
 const worldToScreen = (wx, wy) => {
-        const sx = SCREEN_CENTER + wx * ZOOM_SCALE;
-        const sy = SCREEN_CENTER - wy * ZOOM_SCALE;
+        const sx = SCREEN_CENTER + (wx + cameraOffsetX) * ZOOM_SCALE;
+        const sy = SCREEN_CENTER - (wy + cameraOffsetY) * ZOOM_SCALE;
         return { x: sx, y: sy};
     };
 
@@ -291,8 +297,8 @@ function velocityFromDrag(start, end, scale) {
 
 function screenToWorld(sx, sy) {
     return {
-        x: (sx - SCREEN_CENTER) / ZOOM_SCALE,
-        y: (SCREEN_CENTER - sy) / ZOOM_SCALE
+        x: (sx - SCREEN_CENTER) / ZOOM_SCALE - cameraOffsetX,
+        y: (SCREEN_CENTER - sy) / ZOOM_SCALE + cameraOffsetY
     };
 }
 
@@ -363,6 +369,18 @@ canvas.addEventListener('pointermove', (ev) => {
     const sx = ev.clientX - rect.left;
     const sy = ev.clientY - rect.top;
 
+    if (isDraggingCamera) {
+        const dx = ev.clientX - cameraDragStart.x;
+        const dy = ev.clientY - cameraDragStart.y;
+        
+        // Adjust camera offset inversely relative to zoom scale
+        cameraOffsetX += dx / ZOOM_SCALE;
+        cameraOffsetY -= dy / ZOOM_SCALE;
+        
+        cameraDragStart = { x: ev.clientX, y: ev.clientY };
+        return;
+    }
+
     // Handle placement hover line if in placement mode & drawing vector
     if (placementMode && placementPos) {
         placementHoverPos = screenToWorld(sx, sy);
@@ -381,14 +399,32 @@ canvas.addEventListener('pointermove', (ev) => {
     }
 });
 
+canvas.addEventListener('pointerup', () => {
+    if (isDraggingCamera) {
+        isDraggingCamera = false;
+        canvas.style.cursor = placementToggle.checked ? 'crosshair' : 'grab';
+    }
+});
+
 canvas.addEventListener('pointerleave', () => {
     placementHoverPos = null;
+    if (isDraggingCamera) {
+        isDraggingCamera = false;
+        canvas.style.cursor = placementToggle.checked ? 'crosshair' : 'grab';
+    }
 });
 
 canvas.addEventListener('pointerdown', (ev) => {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left;
     const sy = ev.clientY - rect.top;
+
+    if (!placementToggle.checked) {
+        isDraggingCamera = true;
+        cameraDragStart = { x: ev.clientX, y: ev.clientY };
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
 
     const clickedBody = findBodyAtScreenCord(sx, sy);
     if (clickedBody) {
@@ -1090,6 +1126,28 @@ window.addEventListener('wheel', (e) => {
 
     if (currentHistoryIndex !== null) {
         buildHistoryTrailsForIndex(currentHistoryIndex);
+    }
+});
+
+window.addEventListener('keydown', (ev) => {
+    if (!placementMode || currentHistoryFrame) return;
+    // Check for Ctrl+Z (or Cmd+Z on Mac)
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') {
+        ev.preventDefault(); // Prevent browser default undo if any
+
+        // Priority 1: Cancel active placement draft if we are currently dragging a vector
+        if (placementPos) {
+            placementPos = null;
+            placementHoverPos = null;
+            console.log("↩️ Canceled active placement draft.");
+            return;
+        }
+
+        // Priority 2: Pop the last successfully placed body if array is not empty
+        if (placementBodies.length > 0) {
+            const removed = placementBodies.pop();
+            console.log("↩️ Undid last placed body:", removed.id);
+        }
     }
 });
 
