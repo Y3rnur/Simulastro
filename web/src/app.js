@@ -298,7 +298,7 @@ function velocityFromDrag(start, end, scale) {
 function screenToWorld(sx, sy) {
     return {
         x: (sx - SCREEN_CENTER) / ZOOM_SCALE - cameraOffsetX,
-        y: (SCREEN_CENTER - sy) / ZOOM_SCALE + cameraOffsetY
+        y: (SCREEN_CENTER - sy) / ZOOM_SCALE - cameraOffsetY
     };
 }
 
@@ -419,13 +419,6 @@ canvas.addEventListener('pointerdown', (ev) => {
     const sx = ev.clientX - rect.left;
     const sy = ev.clientY - rect.top;
 
-    if (!placementToggle.checked) {
-        isDraggingCamera = true;
-        cameraDragStart = { x: ev.clientX, y: ev.clientY };
-        canvas.style.cursor = 'grabbing';
-        return;
-    }
-
     const clickedBody = findBodyAtScreenCord(sx, sy);
     if (clickedBody) {
         if (pinnedBodyId === clickedBody.id) {
@@ -442,6 +435,13 @@ canvas.addEventListener('pointerdown', (ev) => {
         // clicked empty space while pinned -> unpin
         pinnedBodyId = null;
         inspectorCard.style.display = 'none';
+    }
+
+    if (!placementToggle.checked) {
+        isDraggingCamera = true;
+        cameraDragStart = { x: ev.clientX, y: ev.clientY };
+        canvas.style.cursor = 'grabbing';
+        return;
     }
     
     if (currentHistoryFrame) {
@@ -760,6 +760,7 @@ socket.onmessage = (event) => {
         placementMode = false;
         if (placementToggle) placementToggle.checked = false;
         if (placementControls) placementControls.style.display = 'none';
+        canvas.style.cursor = 'grab';
 
         if (historicalTimelineCache.length > 0) {
             timeSlider.min = 0;
@@ -1066,11 +1067,13 @@ playBtn.onclick = () => {
             sendControl('PLAY');
             if (placementToggle) placementToggle.checked = false;
             placementMode = false;
+            canvas.style.cursor = 'grab';
         });
     } else {
         sendControl('PLAY');
         if (placementToggle) placementToggle.checked = false;
         placementMode = false;
+        canvas.style.cursor = 'grab';
     }
 
     // Lock the timeline slider while simulation is playing forward live
@@ -1088,6 +1091,7 @@ pauseBtn.onclick = () => {
         placementToggle.checked = true;
     }
     placementMode = true;
+    canvas.style.cursor = 'crosshair';
     
     console.log("📤 Sent Command: PAUSE")
 };
@@ -1100,9 +1104,14 @@ historyBtn.onclick = () => {
 if (placementControls && placementToggle) {
     placementControls.style.display = placementToggle.checked ? 'block' : 'none';
 
+    canvas.style.cursor = placementToggle.checked ? 'crosshair' : 'grab';
+
     placementToggle.onchange = (e) => {
         placementMode = e.target.checked;
         placementControls.style.display = placementMode ? 'block' : 'none';
+
+        canvas.style.cursor = placementMode ? 'crosshair' : 'grab';
+        isDraggingCamera = false;
 
         if (placementMode && currentHistoryFrame) {
             currentHistoryFrame = null;
