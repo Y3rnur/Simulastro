@@ -23,9 +23,10 @@ message BodyState {
 
 // A collection of all bodies in the universe at a specific moment in time
 message TelemetryFrame {
-  int64 frame_number = 1;
-  double timestamp = 2;
-  repeated BodyState bodies = 3;
+  string session_id = 1;
+  int64 frame_number = 2;
+  double timestamp = 3;
+  repeated BodyState bodies = 4;
 }
 
 // Acknowledgement
@@ -36,7 +37,8 @@ message SimulationResponse {
 
 // control message for speed control
 message SpeedRequest {
-  double multiplier = 1;
+  string session_id = 1;
+  double multiplier = 2;
 }
 
 message SpeedResponse {
@@ -51,7 +53,8 @@ service SpeedService {
 
 // request by Go server for uploading a scene
 message UploadSceneRequest {
-  repeated BodyState bodies = 1;
+  string session_id = 1;
+  repeated BodyState bodies = 2;
 }
 
 // response from C++ engine confirming scene was loaded
@@ -61,11 +64,12 @@ message UploadSceneResponse {
 }
 
 message ControlRequest {
+  string session_id = 1;
   enum Command {
     PLAY = 0;
     PAUSE = 1;
   }
-  Command command = 1;
+  Command command = 2;
 }
 
 message ControlResponse {

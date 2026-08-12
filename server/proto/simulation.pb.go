@@ -171,9 +171,10 @@ func (x *BodyState) GetAlive() bool {
 // A collection of all bodies in the universe at a specific moment in time
 type TelemetryFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	FrameNumber   int64                  `protobuf:"varint,1,opt,name=frame_number,json=frameNumber,proto3" json:"frame_number,omitempty"`
-	Timestamp     float64                `protobuf:"fixed64,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Bodies        []*BodyState           `protobuf:"bytes,3,rep,name=bodies,proto3" json:"bodies,omitempty"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	FrameNumber   int64                  `protobuf:"varint,2,opt,name=frame_number,json=frameNumber,proto3" json:"frame_number,omitempty"`
+	Timestamp     float64                `protobuf:"fixed64,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Bodies        []*BodyState           `protobuf:"bytes,4,rep,name=bodies,proto3" json:"bodies,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,6 +207,13 @@ func (x *TelemetryFrame) ProtoReflect() protoreflect.Message {
 // Deprecated: Use TelemetryFrame.ProtoReflect.Descriptor instead.
 func (*TelemetryFrame) Descriptor() ([]byte, []int) {
 	return file_simulation_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TelemetryFrame) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *TelemetryFrame) GetFrameNumber() int64 {
@@ -285,7 +293,8 @@ func (x *SimulationResponse) GetSimMessage() string {
 // control message for speed control
 type SpeedRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Multiplier    float64                `protobuf:"fixed64,1,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Multiplier    float64                `protobuf:"fixed64,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -318,6 +327,13 @@ func (x *SpeedRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SpeedRequest.ProtoReflect.Descriptor instead.
 func (*SpeedRequest) Descriptor() ([]byte, []int) {
 	return file_simulation_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SpeedRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *SpeedRequest) GetMultiplier() float64 {
@@ -382,7 +398,8 @@ func (x *SpeedResponse) GetMessage() string {
 // request by Go server for uploading a scene
 type UploadSceneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bodies        []*BodyState           `protobuf:"bytes,1,rep,name=bodies,proto3" json:"bodies,omitempty"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Bodies        []*BodyState           `protobuf:"bytes,2,rep,name=bodies,proto3" json:"bodies,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -415,6 +432,13 @@ func (x *UploadSceneRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use UploadSceneRequest.ProtoReflect.Descriptor instead.
 func (*UploadSceneRequest) Descriptor() ([]byte, []int) {
 	return file_simulation_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UploadSceneRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *UploadSceneRequest) GetBodies() []*BodyState {
@@ -479,7 +503,8 @@ func (x *UploadSceneResponse) GetMessage() string {
 
 type ControlRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Command       ControlRequest_Command `protobuf:"varint,1,opt,name=command,proto3,enum=astrophysics.ControlRequest_Command" json:"command,omitempty"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Command       ControlRequest_Command `protobuf:"varint,2,opt,name=command,proto3,enum=astrophysics.ControlRequest_Command" json:"command,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -512,6 +537,13 @@ func (x *ControlRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ControlRequest.ProtoReflect.Descriptor instead.
 func (*ControlRequest) Descriptor() ([]byte, []int) {
 	return file_simulation_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ControlRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *ControlRequest) GetCommand() ControlRequest_Command {
@@ -586,29 +618,37 @@ const file_simulation_proto_rawDesc = "" +
 	"\x02vx\x18\x05 \x01(\x01R\x02vx\x12\x0e\n" +
 	"\x02vy\x18\x06 \x01(\x01R\x02vy\x12\x16\n" +
 	"\x06radius\x18\a \x01(\x01R\x06radius\x12\x14\n" +
-	"\x05alive\x18\b \x01(\bR\x05alive\"\x82\x01\n" +
-	"\x0eTelemetryFrame\x12!\n" +
-	"\fframe_number\x18\x01 \x01(\x03R\vframeNumber\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x01R\ttimestamp\x12/\n" +
-	"\x06bodies\x18\x03 \x03(\v2\x17.astrophysics.BodyStateR\x06bodies\"O\n" +
+	"\x05alive\x18\b \x01(\bR\x05alive\"\xa1\x01\n" +
+	"\x0eTelemetryFrame\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
+	"\fframe_number\x18\x02 \x01(\x03R\vframeNumber\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x01R\ttimestamp\x12/\n" +
+	"\x06bodies\x18\x04 \x03(\v2\x17.astrophysics.BodyStateR\x06bodies\"O\n" +
 	"\x12SimulationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vsim_message\x18\x02 \x01(\tR\n" +
-	"simMessage\".\n" +
-	"\fSpeedRequest\x12\x1e\n" +
+	"simMessage\"M\n" +
+	"\fSpeedRequest\x12\x1d\n" +
 	"\n" +
-	"multiplier\x18\x01 \x01(\x01R\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"multiplier\x18\x02 \x01(\x01R\n" +
 	"multiplier\"9\n" +
 	"\rSpeedResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"E\n" +
-	"\x12UploadSceneRequest\x12/\n" +
-	"\x06bodies\x18\x01 \x03(\v2\x17.astrophysics.BodyStateR\x06bodies\"I\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"d\n" +
+	"\x12UploadSceneRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12/\n" +
+	"\x06bodies\x18\x02 \x03(\v2\x17.astrophysics.BodyStateR\x06bodies\"I\n" +
 	"\x13UploadSceneResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"p\n" +
-	"\x0eControlRequest\x12>\n" +
-	"\acommand\x18\x01 \x01(\x0e2$.astrophysics.ControlRequest.CommandR\acommand\"\x1e\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x8f\x01\n" +
+	"\x0eControlRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12>\n" +
+	"\acommand\x18\x02 \x01(\x0e2$.astrophysics.ControlRequest.CommandR\acommand\"\x1e\n" +
 	"\aCommand\x12\b\n" +
 	"\x04PLAY\x10\x00\x12\t\n" +
 	"\x05PAUSE\x10\x01\"E\n" +
