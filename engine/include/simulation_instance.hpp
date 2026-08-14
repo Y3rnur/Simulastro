@@ -204,7 +204,7 @@ public:
             new_body.alive = body.alive();
             m_bodies.push_back(new_body);
         }
-        m_scene_loaded = false;
+        m_scene_loaded = true;
         m_is_running = false;
         m_current_time = 0.0;
         m_frame = 0;

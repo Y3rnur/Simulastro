@@ -3,13 +3,13 @@
 
 #include <unordered_map>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include "simulation_instance.hpp"
 
 class SimulationManager {
 private:
-    std::mutex m_manager_mutex;
+    mutable std::shared_mutex m_manager_mutex;
     std::unordered_map<std::string, std::shared_ptr<SimulationInstance>> m_instances;
 
 public:
@@ -17,7 +17,7 @@ public:
 
     // Get an existing instance or create a new one if it doesn't exist for this session_id
     std::shared_ptr<SimulationInstance> getOrCreateInstance(const std::string& session_id) {
-        std::lock_guard<std::mutex> lock(m_manager_mutex);
+        std::lock_guard<std::shared_mutex> lock(m_manager_mutex);
         auto it = m_instances.find(session_id);
         if (it != m_instances.end()) {
             return it->second;
@@ -32,7 +32,7 @@ public:
 
     // Lookup an existing instance (returns nullptr if not found)
     std::shared_ptr<SimulationInstance> getInstance(const std::string& session_id) {
-        std::lock_guard<std::mutex> lock(m_manager_mutex);
+        std::lock_guard<std::shared_mutex> lock(m_manager_mutex);
         auto it = m_instances.find(session_id);
         if (it != m_instances.end()) {
             return it->second;
@@ -42,11 +42,22 @@ public:
 
     // Explicitly destroy an instance (e.g., on explicit logout or cleanup timeout)
     void destroyInstance(const std::string& session_id) {
-        std::lock_guard<std::mutex> lock(m_manager_mutex);
+        std::lock_guard<std::shared_mutex> lock(m_manager_mutex);
         auto it = m_instances.find(session_id);
         if (it != m_instances.end()) {
             m_instances.erase(it);
             std::cout << "[SimulationManager] Destroyed simulation instance for session: " << session_id << "\n";
+        }
+    }
+
+    // Ticks all active/running instances concurrently in the background loop
+    void tickAllActiveInstances(double dt) {
+        std::shared_lock<std::shared_mutex> lock(m_manager_mutex);
+        for (auto& [session_id, instance] : m_instances) {
+            // Only tick if the simulation is currently playing
+            if (instance && instance->isRunning()) {
+                instance->tick();
+            }
         }
     }
 };
