@@ -9,9 +9,11 @@
 #include "simulation_manager.hpp"
 #include "control_service_impl.hpp"
 #include "simulation_service_impl.hpp"
+#include "simulation.grpc.pb.h"
+#include "telemetry_broadcaster.hpp"
 
 void RunServer() {
-    std::string server_address("0.0.0.0:50051");
+    std::string server_address("0.0.0.0:50052");
 
     // create a central manager for all active simulation sessions
     auto simulation_manager = std::make_shared<SimulationManager>();
@@ -32,6 +34,9 @@ void RunServer() {
     // build and start gRPC server
     std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
     std::cout << "[C++ Engine] Server listening on " << server_address << "\n";
+    
+    // instantiate telemetry broadcaster pointing to the Go backend
+    TelemetryBroadcaster broadcaster("localhost:50051");
 
     std::atomic<bool> engine_running(true);
 
@@ -49,6 +54,11 @@ void RunServer() {
                 std::this_thread::sleep_for(target_frame_duration - elapsed);
             }
         }
+    });
+
+    // background worker thread for streaming telemetry back to Go
+    std::thread telemetry_worker([&broadcaster, simulation_manager, &engine_running](){
+        broadcaster.StartStreaming(simulation_manager, engine_running);
     });
 
     server->Wait();

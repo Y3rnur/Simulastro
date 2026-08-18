@@ -43,6 +43,7 @@ type Client struct {
 	isPaused  bool                   // state valve for streaming gating
 	UserID    pgtype.UUID            // client's database user ID
 	DbQueries *db.Queries            // sqlc queries handle
+	SessionID string                 // session ID of certain user simulation
 }
 
 // Small struct to parse the control payload
@@ -102,7 +103,8 @@ func handleControl(c *Client, cmd string) {
 			defer cancel()
 
 			_, err := c.Hub.ControlClient.Control(ctx, &pb.ControlRequest{
-				Command: pb.ControlRequest_PAUSE,
+				Command:   pb.ControlRequest_PAUSE,
+				SessionId: c.SessionID,
 			})
 			if err != nil {
 				c.SendError("Engine pause failed")
@@ -117,7 +119,8 @@ func handleControl(c *Client, cmd string) {
 			defer cancel()
 
 			_, err := c.Hub.ControlClient.Control(ctx, &pb.ControlRequest{
-				Command: pb.ControlRequest_PLAY,
+				Command:   pb.ControlRequest_PLAY,
+				SessionId: c.SessionID,
 			})
 			if err != nil {
 				c.SendError("Engine play failed")
@@ -152,7 +155,10 @@ func handleSceneUpload(c *Client, scene *SceneDraft) {
 		}
 	}
 
-	req := &pb.UploadSceneRequest{Bodies: pbBodies}
+	req := &pb.UploadSceneRequest{
+		SessionId: c.SessionID,
+		Bodies:    pbBodies,
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -570,6 +576,9 @@ func ServeWs(hub *Hub, simCache *cache.SimulationCache, dbQueries *db.Queries, w
 		return
 	}
 
+	// generating session ID (backend side)
+	sessionID := generateSessionID()
+
 	client := &Client{
 		Hub:       hub,
 		Conn:      conn,
@@ -578,9 +587,16 @@ func ServeWs(hub *Hub, simCache *cache.SimulationCache, dbQueries *db.Queries, w
 		isPaused:  false,
 		DbQueries: dbQueries,
 		UserID:    userID,
+		SessionID: sessionID,
 	}
 
 	client.Hub.Register <- client
+
+	initMsg, _ := json.Marshal(map[string]string{
+		"type":       "SESSION_ESTABLISHED",
+		"session_id": sessionID,
+	})
+	client.Send <- initMsg
 
 	// Launch individual client execution run routines onto independent lightweight concurrent spaces
 	go client.WritePump()

@@ -1,6 +1,8 @@
 package websocket
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 
@@ -79,13 +81,17 @@ func (h *Hub) Run() {
 				continue
 			}
 
-			// Distribute the payload out to every single connected browser tab simultaneously
+			// Distribute the payload out to specified single connected browser tab simultaneously
 			for client := range h.clients {
+				// multi-tenant isolation (only stream to the matching session)
+				if client.SessionID != frame.GetSessionId() {
+					continue
+				}
+
 				select {
 				case client.Send <- payload:
 				default:
 					log.Printf("⚠️ Buffer full for a client, dropping frame %d", frame.FrameNumber)
-					log.Printf("❌ CRITICAL: Client buffer full for 3+ bodies. Disconnecting client to save server memory.")
 					/*
 						// if a client's individual buffer channel is choked, close it down to save server health
 						close(client.Send)
@@ -95,4 +101,13 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// helper for generating random session ID value
+func generateSessionID() string {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "fallback-session-id"
+	}
+	return hex.EncodeToString(bytes)
 }

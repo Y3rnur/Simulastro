@@ -60,6 +60,11 @@ public:
             }
         }
     }
+
+    std::unordered_map<std::string, std::shared_ptr<SimulationInstance>> getAllActiveInstancesSnapshot() {
+        std::shared_lock<std::shared_mutex> lock(m_manager_mutex);
+        return m_instances;
+    }
 };
 
 #endif
