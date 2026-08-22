@@ -25,8 +25,8 @@ type simulationServer struct {
 	pb.UnimplementedSimulationServiceServer
 	pb.UnimplementedSpeedServiceServer
 
-	simCache *cache.SimulationCache
-	wsHub    *websocket.Hub
+	cacheManager *cache.SessionCacheManager
+	wsHub        *websocket.Hub
 
 	speedMutex      sync.RWMutex
 	speedMultiplier float64
@@ -51,10 +51,7 @@ func (s *simulationServer) StreamTelemetry(stream pb.SimulationService_StreamTel
 		frame, err := stream.Recv()
 
 		if err == io.EOF {
-			total, currentIdx := s.simCache.GetStats()
 			fmt.Printf("\n🏁 C++ Engine finished streaming!\n")
-			fmt.Printf("📊 Server Cache Stats -> Total Frames Handled: %d | Current Ring Pointer Index: %d\n", total, currentIdx)
-
 			response := &pb.SimulationResponse{
 				Success:    true,
 				SimMessage: "Data bridge stable. All frames safely captured by Go Hub Cache!",
@@ -69,39 +66,19 @@ func (s *simulationServer) StreamTelemetry(stream pb.SimulationService_StreamTel
 			return err
 		}
 
-		s.simCache.Push(frame) // save frame into circular cache
+		// extract session ID
+		sessionID := frame.SessionId
+		if sessionID == "" {
+			sessionID = "default-session"
+		}
+
+		// initialize private cache
+		sessionCache := s.cacheManager.GetOrCreate(sessionID)
+		sessionCache.Push(frame)
 
 		s.wsHub.Broadcast <- frame // throw the frame into the Hub's broadcast channel
 
 		fmt.Printf("📦 [Cached & Broadcasted Frame %d] Timestamp: %.3fs | Contains %d Celestial Bodies\n", frame.FrameNumber, frame.Timestamp, len(frame.Bodies))
-	}
-}
-
-func TestingCache() { /* FOR TESTING THE CIRCULAR BUFFER OF TELEMETRY FRAMES */
-	fmt.Println("Executing Simulation Cache...")
-
-	simCache := cache.NewSimulationCache(5)
-
-	fmt.Println("Simulating C++ streaming data burst...")
-	for i := 1; i <= 7; i++ {
-		mockFrame := &pb.TelemetryFrame{
-			FrameNumber: int64(i),
-			Timestamp:   float64(i) * 0.001,
-			Bodies:      []*pb.BodyState{}, // empty for convenience
-		}
-		simCache.Push(mockFrame)
-
-		total, nextIdx := simCache.GetStats()
-		fmt.Printf("Pushed frame %d | Total Frames Processed: %d | Next Write Index Target: %d\n", i, total, nextIdx)
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	// Extract chronological history to prove time travel works and old frames are vaporized
-	fmt.Println("Compiling Chronological History Timeline for the UI slider...")
-	history := simCache.GetHistory()
-
-	for idx, frame := range history {
-		fmt.Printf("[History Position %d] -> Contains Frame Number: %d (Timestamp: %.3fs)\n", idx, frame.FrameNumber, frame.Timestamp)
 	}
 }
 
@@ -128,8 +105,8 @@ func main() {
 	_ = dbQueries
 
 	maxHistorySlots := 20000
-	globalCache := cache.NewSimulationCache(maxHistorySlots)
-	fmt.Printf("Pre-allocated %d structural history frames in local system memory.\n", maxHistorySlots)
+	cacheManager := cache.NewSessionCacheManager(maxHistorySlots)
+	fmt.Printf("Pre-allocating dynamic multi-tenant session cache structures (max %d slots per session).\n", maxHistorySlots)
 
 	engineConn, err := grpc.DialContext(
 		context.Background(),
@@ -152,7 +129,7 @@ func main() {
 	http.Handle("/", fs)
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		websocket.ServeWs(wsHub, globalCache, dbQueries, w, r)
+		websocket.ServeWs(wsHub, cacheManager, dbQueries, w, r)
 	})
 
 	authHandler := auth.NewAuthHandler(dbQueries)
@@ -177,9 +154,9 @@ func main() {
 	grpcServer := grpc.NewServer()
 
 	simServer := &simulationServer{
-		simCache:        globalCache, // connect cache to the network receiver
-		wsHub:           wsHub,       // connect hub instance to gRPC receiver
-		speedMultiplier: 1.0,         // default 1.0x execution speed
+		cacheManager:    cacheManager, // connect cache to the network receiver
+		wsHub:           wsHub,        // connect hub instance to gRPC receiver
+		speedMultiplier: 1.0,          // default 1.0x execution speed
 	}
 
 	pb.RegisterSimulationServiceServer(grpcServer, simServer)

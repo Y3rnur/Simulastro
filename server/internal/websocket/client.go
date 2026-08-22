@@ -543,7 +543,7 @@ func (c *Client) WritePump() {
 }
 
 // ServeWs upgrades the raw HTTP connection to a full bi-directional WebSocket client link
-func ServeWs(hub *Hub, simCache *cache.SimulationCache, dbQueries *db.Queries, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, cacheManager *cache.SessionCacheManager, dbQueries *db.Queries, w http.ResponseWriter, r *http.Request) {
 	// extract and validate the auth cookie
 	cookie, err := r.Cookie("auth_token")
 	if err != nil {
@@ -579,11 +579,14 @@ func ServeWs(hub *Hub, simCache *cache.SimulationCache, dbQueries *db.Queries, w
 	// generating session ID (backend side)
 	sessionID := generateSessionID()
 
+	// Get or create the isolated cache for this specific browser connection session
+	sessionCache := cacheManager.GetOrCreate(sessionID)
+
 	client := &Client{
 		Hub:       hub,
 		Conn:      conn,
 		Send:      make(chan []byte, 1024),
-		simCache:  simCache,
+		simCache:  sessionCache,
 		isPaused:  false,
 		DbQueries: dbQueries,
 		UserID:    userID,
