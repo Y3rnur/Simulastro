@@ -160,6 +160,8 @@ let editingSceneId = null;
 
 let currentUser = JSON.parse(localStorage.getItem('astrophysics_user')) || null;
 
+let currentSessionId = null;
+
 function updateAuthUI() {
     if (currentUser) {
         loggedOutView.style.display = 'none';
@@ -826,6 +828,12 @@ socket.onmessage = (event) => {
             loadSceneModal.style.display = 'none';
         }
     }
+
+    if (packet.type === "SESSION_ESTABLISHED") {
+        currentSessionId = packet.session_id;
+        console.log("Assigned Session ID: ", currentSessionId);
+        return;
+    }
 };
 
 // Timeline range slider movements
@@ -1050,8 +1058,7 @@ function renderLoop(now) {
 requestAnimationFrame(renderLoop);
 
 function sendSpeed(mult) {
-    const msg = JSON.stringify({ type: 'SET_SPEED', multiplier: Number(mult) });
-    socket.send(msg);
+    sendSimulationMessage('SET_SPEED', { multiplier: Number(mult) });
 }
 
 // UI Button actions
@@ -1097,7 +1104,7 @@ pauseBtn.onclick = () => {
 };
 
 historyBtn.onclick = () => {
-    socket.send(JSON.stringify({ type: 'FETCH_HISTORY' }));
+    sendSimulationMessage('FETCH_HISTORY');
     console.log("📤 Sent Command: FETCH_HISTORY");
 };
 
@@ -1197,10 +1204,7 @@ function sendUploadScene(cb) {
     const scene = { 
         bodies: placementBodies
     };
-    socket.send(JSON.stringify({
-        type: 'UPLOAD_SCENE',
-        scene
-    }));
+    sendSimulationMessage('UPLOAD_SCENE', { scene });
 
     if (cb) cb();
 }
@@ -1416,5 +1420,18 @@ closeEditModalBtn.onclick = closeEditModal;
 cancelEditModalBtn.onclick = closeEditModal;
 
 function sendControl(cmd) {
-    socket.send(JSON.stringify({ type: 'CONTROL', command: cmd}));
+    sendSimulationMessage('CONTROL', { command: cmd });
+}
+
+function sendSimulationMessage(type, additionalData = {}) {
+    if (!currentSessionId) {
+        console.warn("⚠️ Session ID not established yet!");
+        return;
+    }
+    const message = {
+        type: type,
+        session_id: currentSessionId,
+        ...additionalData
+    };
+    socket.send(JSON.stringify(message));
 }

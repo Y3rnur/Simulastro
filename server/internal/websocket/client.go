@@ -114,6 +114,7 @@ func handleControl(c *Client, cmd string) {
 		log.Println("⏸️ System Paused")
 	case "PLAY":
 		c.isPaused = false
+		c.simCache.Reset()
 		if c.Hub.ControlClient != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -135,6 +136,8 @@ func handleControl(c *Client, cmd string) {
 }
 
 func handleSceneUpload(c *Client, scene *SceneDraft) {
+	c.simCache.Reset()
+
 	if scene == nil || len(scene.Bodies) == 0 {
 		c.SendError("Empty scene received")
 		return
@@ -282,6 +285,8 @@ func handleListScenes(c *Client) {
 }
 
 func handleLoadScene(c *Client, sceneIDStr string) {
+	c.simCache.Reset()
+
 	var sceneID pgtype.UUID
 	if err := sceneID.Scan(sceneIDStr); err != nil {
 		c.SendError("Invalid scene ID format")

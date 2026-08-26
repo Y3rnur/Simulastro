@@ -75,3 +75,16 @@ func (c *SimulationCache) GetStats() (int64, int) {
 	defer c.mu.RUnlock()
 	return c.totalFrames, c.writeIndex
 }
+
+// Reset wipes the ring buffer state so a new simulation run starts with a clean timeline
+func (c *SimulationCache) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// clear frame pointers to release memory
+	for i := range c.frames {
+		c.frames[i] = nil
+	}
+	c.writeIndex = 0
+	c.totalFrames = 0
+}
