@@ -9,8 +9,7 @@
 #include <iostream>
 #include "body.hpp"
 #include "simulation.grpc.pb.h"
-
-const double G = 6.67430e-11;   // Gravitational Constant
+#include "quadtree.hpp"
 
 // Structure to hold derivatives: change in position (dx, dy) and change in velocity (dvx, dvy)
 struct Derivative {
@@ -32,26 +31,50 @@ private:
     double m_step_accumulator = 0.0;
     const int MAX_SUBSTEPS = 100;
 
-    // Derivative function: returns velocity and acceleration (force/mass)
-    Derivative calculate_derivative(const State& s, double mass, const std::vector<Body>& all_bodies, int my_id) {
-        double ax = 0, ay = 0;
+    // Helper to build a quadtree for a given set of bodies
+    QuadTreeNode build_quadtree(const std::vector<Body>& bodies) {
+        // Find bounding box encompassing all active bodies
+        double min_x = 1e9, max_x = -1e9;
+        double min_y = 1e9, max_y = -1e9;
 
-        for (const auto& other : all_bodies) {
-            if (other.id == my_id || !other.alive) continue;
-
-            double dx = other.state.x - s.x;
-            double dy = other.state.y - s.y;
-            double dist_sq = dx * dx + dy * dy + 1e-4;   // +1e-4 to avoid division by zero
-            double dist = std::sqrt(dist_sq);
-            // double force = (G * mass * other.mass) / dist_sq; <- FORCE, if expressed fully by formula F = G*m1*m2 / r^2
-
-            double accel = (G * other.mass) / dist_sq;
-
-            ax += accel * (dx / dist);
-            ay += accel * (dy / dist);
+        for (const auto& body : bodies) {
+            if (!body.alive) continue;
+            min_x = std::min(min_x, body.state.x);
+            max_x = std::max(max_x, body.state.x);
+            min_y = std::min(min_y, body.state.y);
+            max_y = std::max(max_y, body.state.y);
         }
 
-        return Derivative{s.vx, s.vy, ax, ay};    // Returns {dx/dt, dy/dt, dvx/dt, dvy/dt}
+        // Compute center dimensions with a safety margin (padding)
+        double center_x = (min_x + max_x) / 2.0;
+        double center_y = (min_y + max_y) / 2.0;
+        double max_span = std::max(max_x - min_x, max_y - min_y);
+        double root_width = std::max(max_span * 2.0, 1000.0);
+
+        // Build the QuadTree from scratch for this frame
+        QuadTreeNode root(center_x, center_y, root_width, root_width);
+        for (const auto& body : bodies) {
+            if (body.alive) {
+                // pass a non-const pointer to the body
+                root.insert(const_cast<Body*>(&body));
+            }
+        }
+        return root;
+    }
+
+    std::vector<Derivative> compute_derivatives(const std::vector<Body>& bodies, const QuadTreeNode& root) {
+        int n = bodies.size();
+        std::vector<Derivative> derivs(n);
+        for (int i = 0; i < n; ++i) {
+            if (!bodies[i].alive) {
+                derivs[i] = Derivative{0.0, 0.0, 0.0, 0.0};
+                continue;
+            }
+            double ax = 0.0, ay = 0.0;
+            root.calculateForce(bodies[i], ax, ay, 0.5);
+            derivs[i] = Derivative{bodies[i].state.vx, bodies[i].state.vy, ax, ay};
+        }
+        return derivs;
     }
 
     // Perform a single Runge-Kutta 4th Order step for the entire universe
@@ -60,14 +83,8 @@ private:
         if (n == 0) return;
 
         // Calculate k1 (at current position) for everyone
-        std::vector<Derivative> k1(n);
-        for (int i = 0; i < n; ++i) {
-            if (!m_bodies[i].alive) {
-                k1[i] = Derivative{0.0, 0.0, 0.0, 0.0};
-            } else {
-                k1[i] = calculate_derivative(m_bodies[i].state, m_bodies[i].mass, m_bodies, m_bodies[i].id);
-            }
-        }
+        QuadTreeNode tree_k1 = build_quadtree(m_bodies);
+        std::vector<Derivative> k1 = compute_derivatives(m_bodies, tree_k1);
 
         // Creating temporary universe shifted halfway using k1
         std::vector<Body> universe_k2 = m_bodies;
@@ -79,14 +96,8 @@ private:
         }
 
         // Calculate k2 (with shifted universe) for everyone
-        std::vector<Derivative> k2(n);
-        for (int i = 0; i < n; ++i) {
-            if (!m_bodies[i].alive) {
-                k2[i] = Derivative{0.0, 0.0, 0.0, 0.0};
-            } else {
-                k2[i] = calculate_derivative(universe_k2[i].state, universe_k2[i].mass, universe_k2, universe_k2[i].id);
-            }
-        }
+        QuadTreeNode tree_k2 = build_quadtree(universe_k2);
+        std::vector<Derivative> k2 = compute_derivatives(universe_k2, tree_k2);
 
         // Creating temporary universe shifted halfway using k2
         std::vector<Body> universe_k3 = m_bodies;
@@ -98,14 +109,8 @@ private:
         }
 
         // Calculate k3 (with shifted universe) for everyone
-        std::vector<Derivative> k3(n);
-        for (int i = 0; i < n; ++i) {
-            if (!m_bodies[i].alive) {
-                k3[i] = Derivative{0.0, 0.0, 0.0, 0.0};
-            } else {
-                k3[i] = calculate_derivative(universe_k3[i].state, universe_k3[i].mass, universe_k3, universe_k3[i].id);
-            }
-        }
+        QuadTreeNode tree_k3 = build_quadtree(universe_k3);
+        std::vector<Derivative> k3 = compute_derivatives(universe_k3, tree_k3);
 
         // Creating temporary universe shifted a full step using k3
         std::vector<Body> universe_k4 = m_bodies;
@@ -117,14 +122,8 @@ private:
         }
 
         // Calculate k4 (with shifted universe) for everyone
-        std::vector<Derivative> k4(n);
-        for (int i = 0; i < n; ++i) {
-            if (!m_bodies[i].alive) {
-                k4[i] = Derivative{0.0, 0.0, 0.0, 0.0};
-            } else {
-                k4[i] = calculate_derivative(universe_k4[i].state, universe_k4[i].mass, universe_k4, universe_k4[i].id);
-            }
-        }
+        QuadTreeNode tree_k4 = build_quadtree(universe_k4);
+        std::vector<Derivative> k4 = compute_derivatives(universe_k4, tree_k4);
 
         // Updating the real universe states using the weighted average
         for (int i = 0; i < n; ++i) {

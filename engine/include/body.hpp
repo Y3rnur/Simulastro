@@ -4,6 +4,8 @@
 #include <cmath>
 #include <algorithm>
 
+const double G = 6.67430e-11;   // Gravitational Constant
+
 struct State {
     double x, y;
     double vx, vy;
